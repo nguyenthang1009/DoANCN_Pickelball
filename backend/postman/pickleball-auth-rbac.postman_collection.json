@@ -1,0 +1,272 @@
+{
+  "info": {
+    "name": "Pickleball Booking – Tuần 4 Auth & RBAC",
+    "description": "Kịch bản kiểm thử đăng ký, đăng nhập, JWT và phân quyền 4 vai trò. Chạy theo thứ tự (Run collection). Tài khoản mẫu trong seed.sql dùng mật khẩu 12345678.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api" },
+    { "key": "seedPassword", "value": "12345678" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.collectionVariables.get('suffix')) {",
+          "  const s = String(Date.now()).slice(-8);",
+          "  pm.collectionVariables.set('suffix', s);",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Sức khỏe hệ thống",
+      "item": [
+        {
+          "name": "Health check",
+          "request": { "method": "GET", "url": "{{baseUrl}}/health" },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "1. Đăng nhập 4 vai trò",
+      "item": [
+        {
+          "name": "Admin đăng nhập bằng email",
+          "request": { "method": "POST", "url": "{{baseUrl}}/auth/login", "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"identifier\": \"admin@pickleball.vn\", \"password\": \"{{seedPassword}}\" }" } },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 và vai trò ADMIN', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().user.role).to.eql('ADMIN'); });",
+            "pm.test('Không trả về password_hash', () => pm.expect(pm.response.text()).to.not.include('password_hash'));",
+            "pm.collectionVariables.set('adminToken', pm.response.json().token);"
+          ] } }]
+        },
+        {
+          "name": "Manager đăng nhập bằng số điện thoại",
+          "request": { "method": "POST", "url": "{{baseUrl}}/auth/login", "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"identifier\": \"0901000002\", \"password\": \"{{seedPassword}}\" }" } },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 và vai trò MANAGER thuộc cơ sở 1', () => { pm.response.to.have.status(200); const u = pm.response.json().user; pm.expect(u.role).to.eql('MANAGER'); pm.expect(u.venueId).to.eql(1); });",
+            "pm.collectionVariables.set('managerToken', pm.response.json().token);"
+          ] } }]
+        },
+        {
+          "name": "Staff đăng nhập",
+          "request": { "method": "POST", "url": "{{baseUrl}}/auth/login", "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"identifier\": \"staff.q7@pickleball.vn\", \"password\": \"{{seedPassword}}\" }" } },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 và vai trò STAFF', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().user.role).to.eql('STAFF'); });",
+            "pm.collectionVariables.set('staffToken', pm.response.json().token);"
+          ] } }]
+        },
+        {
+          "name": "Customer đăng nhập",
+          "request": { "method": "POST", "url": "{{baseUrl}}/auth/login", "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"identifier\": \"customer1@gmail.com\", \"password\": \"{{seedPassword}}\" }" } },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 và vai trò CUSTOMER', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().user.role).to.eql('CUSTOMER'); });",
+            "pm.collectionVariables.set('customerToken', pm.response.json().token);"
+          ] } }]
+        },
+        {
+          "name": "Sai mật khẩu bị từ chối",
+          "request": { "method": "POST", "url": "{{baseUrl}}/auth/login", "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"identifier\": \"admin@pickleball.vn\", \"password\": \"sai-mat-khau\" }" } },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('401 INVALID_CREDENTIALS', () => { pm.response.to.have.status(401); pm.expect(pm.response.json().error.code).to.eql('INVALID_CREDENTIALS'); });"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "2. Đăng ký khách hàng",
+      "item": [
+        {
+          "name": "Đăng ký thành công",
+          "request": { "method": "POST", "url": "{{baseUrl}}/auth/register", "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"fullName\": \"Khách Kiểm Thử\", \"email\": \"khach{{suffix}}@gmail.com\", \"phone\": \"09{{suffix}}\", \"password\": \"matkhau123\" }" } },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('201 và luôn là CUSTOMER', () => { pm.response.to.have.status(201); pm.expect(pm.response.json().user.role).to.eql('CUSTOMER'); pm.expect(pm.response.json().token).to.be.a('string'); });"
+          ] } }]
+        },
+        {
+          "name": "Trùng số điện thoại",
+          "request": { "method": "POST", "url": "{{baseUrl}}/auth/register", "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"fullName\": \"Khách Trùng\", \"email\": \"khac{{suffix}}@gmail.com\", \"phone\": \"09{{suffix}}\", \"password\": \"matkhau123\" }" } },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('409 DUPLICATE_ACCOUNT', () => { pm.response.to.have.status(409); pm.expect(pm.response.json().error.code).to.eql('DUPLICATE_ACCOUNT'); });"
+          ] } }]
+        },
+        {
+          "name": "Số điện thoại sai định dạng",
+          "request": { "method": "POST", "url": "{{baseUrl}}/auth/register", "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"fullName\": \"Khách Lỗi\", \"email\": \"loi{{suffix}}@gmail.com\", \"phone\": \"12345\", \"password\": \"matkhau123\" }" } },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('400 VALIDATION_ERROR', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'); });"
+          ] } }]
+        },
+        {
+          "name": "Không cho tự đăng ký làm ADMIN",
+          "request": { "method": "POST", "url": "{{baseUrl}}/auth/register", "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"fullName\": \"Kẻ Gian\", \"email\": \"gian{{suffix}}@gmail.com\", \"phone\": \"08{{suffix}}\", \"password\": \"matkhau123\", \"role\": \"ADMIN\" }" } },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('201 nhưng vai trò vẫn là CUSTOMER', () => { pm.response.to.have.status(201); pm.expect(pm.response.json().user.role).to.eql('CUSTOMER'); });"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "3. verifyToken",
+      "item": [
+        {
+          "name": "Không có token",
+          "request": { "method": "GET", "url": "{{baseUrl}}/auth/me" },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('401 UNAUTHENTICATED', () => { pm.response.to.have.status(401); pm.expect(pm.response.json().error.code).to.eql('UNAUTHENTICATED'); });"
+          ] } }]
+        },
+        {
+          "name": "Token giả",
+          "request": { "method": "GET", "url": "{{baseUrl}}/auth/me", "header": [{ "key": "Authorization", "value": "Bearer abc.def.ghi" }] },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('401 INVALID_TOKEN', () => { pm.response.to.have.status(401); pm.expect(pm.response.json().error.code).to.eql('INVALID_TOKEN'); });"
+          ] } }]
+        },
+        {
+          "name": "Token hợp lệ",
+          "request": { "method": "GET", "url": "{{baseUrl}}/auth/me", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }] },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 và đúng khách hàng', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().user.email).to.eql('customer1@gmail.com'); });"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "4. authorize(['ADMIN']) – quản lý tài khoản",
+      "item": [
+        {
+          "name": "Admin xem danh sách tài khoản",
+          "request": { "method": "GET", "url": "{{baseUrl}}/admin/users", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }] },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 và có ít nhất 4 tài khoản', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().users.length).to.be.at.least(4); });"
+          ] } }]
+        },
+        {
+          "name": "Manager bị chặn",
+          "request": { "method": "GET", "url": "{{baseUrl}}/admin/users", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }] },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('403 FORBIDDEN', () => { pm.response.to.have.status(403); pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN'); });"
+          ] } }]
+        },
+        {
+          "name": "Staff bị chặn",
+          "request": { "method": "GET", "url": "{{baseUrl}}/admin/users", "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }] },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('403 FORBIDDEN', () => pm.response.to.have.status(403));"
+          ] } }]
+        },
+        {
+          "name": "Customer bị chặn",
+          "request": { "method": "GET", "url": "{{baseUrl}}/admin/users", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }] },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('403 FORBIDDEN', () => pm.response.to.have.status(403));"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "5. authorize(['ADMIN', 'MANAGER']) + giới hạn theo cơ sở",
+      "item": [
+        {
+          "name": "Manager Q7 xem nhân sự cơ sở 1",
+          "request": { "method": "GET", "url": "{{baseUrl}}/venues/1/staff", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }] },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 và chỉ có nhân sự cơ sở 1', () => { pm.response.to.have.status(200); pm.response.json().users.forEach(u => pm.expect(u.venueId).to.eql(1)); });"
+          ] } }]
+        },
+        {
+          "name": "Manager Q7 xem cơ sở 2",
+          "request": { "method": "GET", "url": "{{baseUrl}}/venues/2/staff", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }] },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('403 vì không phải cơ sở của mình', () => { pm.response.to.have.status(403); pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN'); });"
+          ] } }]
+        },
+        {
+          "name": "Admin xem cơ sở 2",
+          "request": { "method": "GET", "url": "{{baseUrl}}/venues/2/staff", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }] },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));"
+          ] } }]
+        },
+        {
+          "name": "Staff bị chặn",
+          "request": { "method": "GET", "url": "{{baseUrl}}/venues/1/staff", "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }] },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('403 FORBIDDEN', () => pm.response.to.have.status(403));"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "6. Tài khoản nội bộ phải đổi mật khẩu lần đầu",
+      "item": [
+        {
+          "name": "Admin tạo Manager cho cơ sở Thủ Đức",
+          "request": { "method": "POST", "url": "{{baseUrl}}/admin/users", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"fullName\": \"Quản Lý Thủ Đức\", \"email\": \"manager{{suffix}}@pickleball.vn\", \"phone\": \"07{{suffix}}\", \"role\": \"MANAGER\", \"venueId\": 2 }" } },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('201, có mật khẩu tạm và cờ đổi mật khẩu', () => { pm.response.to.have.status(201); const b = pm.response.json(); pm.expect(b.tempPassword).to.be.a('string'); pm.expect(b.user.mustChangePassword).to.eql(true); });",
+            "pm.collectionVariables.set('newManagerTemp', pm.response.json().tempPassword);"
+          ] } }]
+        },
+        {
+          "name": "Manager mới đăng nhập bằng mật khẩu tạm",
+          "request": { "method": "POST", "url": "{{baseUrl}}/auth/login", "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"identifier\": \"manager{{suffix}}@pickleball.vn\", \"password\": \"{{newManagerTemp}}\" }" } },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 và mustChangePassword = true', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().user.mustChangePassword).to.eql(true); });",
+            "pm.collectionVariables.set('newManagerToken', pm.response.json().token);"
+          ] } }]
+        },
+        {
+          "name": "Chưa đổi mật khẩu thì bị chặn",
+          "request": { "method": "GET", "url": "{{baseUrl}}/venues/2/staff", "header": [{ "key": "Authorization", "value": "Bearer {{newManagerToken}}" }] },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('403 PASSWORD_CHANGE_REQUIRED', () => { pm.response.to.have.status(403); pm.expect(pm.response.json().error.code).to.eql('PASSWORD_CHANGE_REQUIRED'); });"
+          ] } }]
+        },
+        {
+          "name": "Đổi mật khẩu",
+          "request": { "method": "POST", "url": "{{baseUrl}}/auth/change-password", "header": [{ "key": "Authorization", "value": "Bearer {{newManagerToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"currentPassword\": \"{{newManagerTemp}}\", \"newPassword\": \"MatKhauMoi@2026\" }" } },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 và gỡ cờ đổi mật khẩu', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().user.mustChangePassword).to.eql(false); });",
+            "pm.collectionVariables.set('newManagerToken', pm.response.json().token);"
+          ] } }]
+        },
+        {
+          "name": "Sau khi đổi được vào cơ sở của mình",
+          "request": { "method": "GET", "url": "{{baseUrl}}/venues/2/staff", "header": [{ "key": "Authorization", "value": "Bearer {{newManagerToken}}" }] },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));"
+          ] } }]
+        },
+        {
+          "name": "Customer không tạo được tài khoản nội bộ",
+          "request": { "method": "POST", "url": "{{baseUrl}}/admin/users", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"fullName\": \"Gian\", \"email\": \"gian2{{suffix}}@pickleball.vn\", \"phone\": \"06{{suffix}}\", \"role\": \"ADMIN\" }" } },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('403 FORBIDDEN', () => pm.response.to.have.status(403));"
+          ] } }]
+        }
+      ]
+    }
+  ]
+}
