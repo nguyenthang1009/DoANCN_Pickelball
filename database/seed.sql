@@ -16,10 +16,10 @@ INSERT INTO holidays (holiday_date, name) VALUES
 
 -- 3. Nạp tài khoản mẫu cho 4 Actors (Mật khẩu mẫu: 12345678 đã băm bcrypt)
 INSERT INTO users (id, full_name, email, phone, password_hash, role) VALUES
-(1, 'Nguyễn Hữu Thắng (Admin)', 'admin@pickleball.vn', '0901000001', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'ADMIN'),
-(2, 'Trần Quản Lý Q7', 'manager.q7@pickleball.vn', '0901000002', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'MANAGER'),
-(3, 'Lê Lễ Tân Q7', 'staff.q7@pickleball.vn', '0901000003', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'STAFF'),
-(4, 'Phạm Khách Hàng', 'customer1@gmail.com', '0909123456', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'CUSTOMER');
+(1, 'Nguyễn Hữu Thắng (Admin)', 'admin@pickleball.vn', '0901000001', '$2b$10$vh1SqBmM/8L4GIcI1YuWduAA1B0d5Gu3Nxs2eNo26aHfmfEHTJOOi', 'ADMIN'),
+(2, 'Trần Quản Lý Q7', 'manager.q7@pickleball.vn', '0901000002', '$2b$10$vh1SqBmM/8L4GIcI1YuWduAA1B0d5Gu3Nxs2eNo26aHfmfEHTJOOi', 'MANAGER'),
+(3, 'Lê Lễ Tân Q7', 'staff.q7@pickleball.vn', '0901000003', '$2b$10$vh1SqBmM/8L4GIcI1YuWduAA1B0d5Gu3Nxs2eNo26aHfmfEHTJOOi', 'STAFF'),
+(4, 'Phạm Khách Hàng', 'customer1@gmail.com', '0909123456', '$2b$10$vh1SqBmM/8L4GIcI1YuWduAA1B0d5Gu3Nxs2eNo26aHfmfEHTJOOi', 'CUSTOMER');
 
 -- 4. Tạo 2 Cơ sở sân (Quận 7 & Thủ Đức) và gán cơ sở cho Manager/Staff
 INSERT INTO venues (id, name, address, open_time, close_time, manager_id) VALUES

@@ -21,9 +21,10 @@ echo "  KHOI TAO CSDL PICKLEBALL BOOKING (TUAN 3 - 3NF SCHEMA)  "
 echo "=========================================================="
 echo "-> Dang su dung MySQL tai: $MYSQL_CMD"
 
-"$MYSQL_CMD" -u "$DB_USER" < ./database/schema.sql
-echo "[OK] Da tao 12 bang chuan 3NF va Unique Slot Lock thanh cong!"
+# utf8mb4: client mysql tren Windows mac dinh cp850, se lam hong tieng Viet trong seed
+"$MYSQL_CMD" -u "$DB_USER" --default-character-set=utf8mb4 < ./database/schema.sql
+echo "[OK] Da tao 13 bang chuan 3NF va Unique Slot Lock thanh cong!"
 
-"$MYSQL_CMD" -u "$DB_USER" "$DB_NAME" < ./database/seed.sql
+"$MYSQL_CMD" -u "$DB_USER" --default-character-set=utf8mb4 "$DB_NAME" < ./database/seed.sql
 echo "[OK] Da nap du lieu mau (Configs, Venues, Courts, Price Rules, Services)!"
 echo "Hoan tat! Mo DBeaver nhan F5 de kiem tra ERD."
