@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { useSlotsWatch } from '../../lib/socket';
 import { fullDate, todayVN, vnd } from '../../lib/format';
 import DateStrip from '../../components/DateStrip';
 import SlotMatrix, { Legend } from '../../components/SlotMatrix';
@@ -30,6 +31,16 @@ export default function Home() {
 
   useEffect(() => { setData(null); setSelection(null); load(); }, [load]);
 
+  // Ô đang chọn bị người khác giữ mất -> bỏ chọn
+  useEffect(() => {
+    if (!data || !selection) return;
+    const c = data.courts.find((x) => x.id === selection.courtId);
+    if (!c || c.slots.slice(selection.startIdx, selection.endIdx + 1).some((s) => s.state !== 'FREE')) {
+      setSelection(null);
+      setError('Một ô bạn đang chọn vừa có người giữ chỗ, vui lòng chọn lại.');
+    }
+  }, [data, selection]);
+
   const limits = data?.limits;
   const court = data?.courts.find((c) => c.id === selection?.courtId);
   const picked = court ? court.slots.slice(selection.startIdx, selection.endIdx + 1) : [];
@@ -52,10 +63,23 @@ export default function Home() {
 
   const venue = useMemo(() => venues.find((v) => v.id === venueId), [venues, venueId]);
 
+  // Ô đổi trạng thái ở máy khác (giữ chỗ, thanh toán, hết hạn) -> tải lại ma trận ngay
+  useSlotsWatch(venueId, date, load);
+
   async function hold() {
     if (!user) { navigate('/dang-nhap', { state: { from: '/' } }); return; }
-    setError('Chức năng giữ chỗ sẽ được bật ở tuần 7.');
-    setHolding(false);
+    if (user.role !== 'CUSTOMER') { navigate('/pos'); return; }
+    setError(''); setHolding(true);
+    try {
+      const { booking } = await api('/bookings', { method: 'POST', body: { courtId: court.id, date, start: picked[0].start, end: picked.at(-1).end } });
+      navigate(`/thanh-toan/${booking.bookingCode}`);
+    } catch (err) {
+      setError(err.message);
+      setSelection(null);
+      load();
+    } finally {
+      setHolding(false);
+    }
   }
 
   return (

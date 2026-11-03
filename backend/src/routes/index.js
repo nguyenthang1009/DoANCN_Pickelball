@@ -8,5 +8,6 @@ router.use('/admin', require('./admin.routes'));
 router.use('/venues', require('./venue.routes'));
 router.use('/courts', require('./court.routes'));
 router.use('/services', require('./serviceItem.routes'));
+router.use('/bookings', require('./booking.routes'));
 
 module.exports = router;

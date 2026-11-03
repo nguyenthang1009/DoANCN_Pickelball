@@ -18,4 +18,7 @@ module.exports = {
     expiresIn: process.env.JWT_EXPIRES_IN || '1d',
   },
   bcryptRounds: Number(process.env.BCRYPT_ROUNDS) || 10,
+  // BR13: khóa ký mã QR check-in; mặc định suy ra từ JWT_SECRET nếu không đặt riêng
+  qrSecret: process.env.QR_SECRET || `${process.env.JWT_SECRET}:qr`,
+  jobIntervalSeconds: Number(process.env.JOB_INTERVAL_SECONDS) || 30,
 };

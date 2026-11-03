@@ -1,10 +1,21 @@
+const http = require('http');
 const app = require('./app');
 const pool = require('./config/db');
-const { port, db } = require('./config/env');
+const realtime = require('./realtime');
+const bookingService = require('./services/booking.service');
+const { port, db, jobIntervalSeconds } = require('./config/env');
 
 async function start() {
   await pool.query('SELECT 1'); // dừng sớm nếu không kết nối được MySQL
-  app.listen(port, () => {
+  const server = http.createServer(app);
+  realtime.init(server); // Socket.io: đổi màu ô ngay trên mọi màn hình
+
+  // Job nền: hết hạn giữ chỗ 10 phút (BR08) và đánh dấu không đến (BR12)
+  const tick = () => bookingService.runHousekeeping().catch((err) => console.error('Housekeeping lỗi:', err.message));
+  setInterval(tick, jobIntervalSeconds * 1000).unref();
+  tick();
+
+  server.listen(port, () => {
     console.log(`API đang chạy tại http://localhost:${port}/api (CSDL ${db.database})`);
   });
 }

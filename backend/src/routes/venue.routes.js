@@ -3,6 +3,7 @@ const venues = require('../controllers/venue.controller');
 const courts = require('../controllers/court.controller');
 const items = require('../controllers/serviceItem.controller');
 const users = require('../controllers/user.controller');
+const bookings = require('../controllers/booking.controller');
 const { verifyToken, authorize, authorizeVenue } = require('../middlewares/auth.middleware');
 const { loadVenue } = require('../middlewares/load.middleware');
 
@@ -25,5 +26,6 @@ router.post('/:venueId/courts', ...managers, ...ownVenue, courts.create);
 router.get('/:venueId/services', verifyToken, authorize(['ADMIN', 'MANAGER', 'STAFF']), ...ownVenue, items.list);
 router.post('/:venueId/services', ...managers, ...ownVenue, items.create);
 router.get('/:venueId/staff', ...managers, ...ownVenue, users.listVenueStaff);
+router.get('/:venueId/bookings', verifyToken, authorize(['ADMIN', 'MANAGER', 'STAFF']), ...ownVenue, bookings.listByVenue);
 
 module.exports = router;
