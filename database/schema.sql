@@ -199,6 +199,9 @@ CREATE TABLE payment_transactions (
     booking_id INT UNSIGNED NOT NULL,
     payos_order_code BIGINT UNSIGNED NOT NULL UNIQUE,      -- Mã orderCode số nguyên gửi sang PayOS
     payos_transaction_id VARCHAR(100) NULL UNIQUE,         -- G5, TC09: Chống xử lý lặp cùng 1 Webhook
+    payment_link_id VARCHAR(100) NULL,                     -- Tuần 8: mã link thanh toán PayOS trả về
+    checkout_url VARCHAR(255) NULL,                        -- Tuần 8: trang thanh toán của PayOS
+    qr_code TEXT NULL,                                     -- Tuần 8: chuỗi VietQR để vẽ mã QR trên trang thanh toán
     amount INT UNSIGNED NOT NULL,                          -- Số tiền thực nhận (VND)
     transaction_status ENUM('PENDING', 'SUCCESS', 'FAILED', 'INVALID_SIGNATURE', 'AMOUNT_MISMATCH') NOT NULL DEFAULT 'PENDING',
     raw_webhook_payload JSON NULL,                         -- NFR12: Lưu toàn bộ JSON gốc từ PayOS để đối soát

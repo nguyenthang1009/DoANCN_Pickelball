@@ -21,4 +21,13 @@ module.exports = {
   // BR13: khóa ký mã QR check-in; mặc định suy ra từ JWT_SECRET nếu không đặt riêng
   qrSecret: process.env.QR_SECRET || `${process.env.JWT_SECRET}:qr`,
   jobIntervalSeconds: Number(process.env.JOB_INTERVAL_SECONDS) || 30,
+  // Cổng PayOS: đủ 3 khóa thì gọi API thật, thiếu thì chạy chế độ mock (giả lập webhook ký đúng chuẩn)
+  payos: {
+    clientId: process.env.PAYOS_CLIENT_ID || '',
+    apiKey: process.env.PAYOS_API_KEY || '',
+    checksumKey: process.env.PAYOS_CHECKSUM_KEY || 'mock-checksum-key-chi-dung-khi-dev',
+    baseUrl: process.env.PAYOS_BASE_URL || 'https://api-merchant.payos.vn',
+    returnUrl: process.env.PAYOS_RETURN_URL || 'http://localhost:5173',
+    get mode() { return this.clientId && this.apiKey && process.env.PAYOS_CHECKSUM_KEY ? 'payos' : 'mock'; },
+  },
 };

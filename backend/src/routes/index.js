@@ -9,5 +9,7 @@ router.use('/venues', require('./venue.routes'));
 router.use('/courts', require('./court.routes'));
 router.use('/services', require('./serviceItem.routes'));
 router.use('/bookings', require('./booking.routes'));
+router.use('/payments', require('./payment.routes'));
+router.use('/checkin', require('./checkin.routes'));
 
 module.exports = router;

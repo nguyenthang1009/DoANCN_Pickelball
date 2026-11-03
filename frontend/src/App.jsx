@@ -1,11 +1,15 @@
 import { Route, Routes } from 'react-router';
-import { CustomerLayout, RequireRole } from './components/Layout';
+import { CustomerLayout, RequireRole, StaffLayout } from './components/Layout';
 import Home from './pages/customer/Home';
 import Payment from './pages/customer/Payment';
 import MyBookings from './pages/customer/MyBookings';
+import Ticket from './pages/customer/Ticket';
+import CheckIn from './pages/staff/CheckIn';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import ChangePassword from './pages/auth/ChangePassword';
+
+const STAFF = ['STAFF', 'MANAGER', 'ADMIN'];
 
 export default function App() {
   return (
@@ -17,6 +21,10 @@ export default function App() {
         <Route index element={<Home />} />
         <Route path="/thanh-toan/:code" element={<RequireRole roles={['CUSTOMER']}><Payment /></RequireRole>} />
         <Route path="/lich-dat" element={<RequireRole roles={['CUSTOMER']}><MyBookings /></RequireRole>} />
+        <Route path="/ve/:code" element={<RequireRole roles={['CUSTOMER']}><Ticket /></RequireRole>} />
+      </Route>
+      <Route element={<RequireRole roles={STAFF}><StaffLayout /></RequireRole>}>
+        <Route path="/check-in" element={<CheckIn />} />
       </Route>
     </Routes>
   );
