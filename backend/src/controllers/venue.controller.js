@@ -1,4 +1,9 @@
 const venueService = require('../services/venue.service');
+const availabilityService = require('../services/availability.service');
+
+async function availability(req, res) {
+  res.json(await availabilityService.getAvailability(req.venue, req.query.date));
+}
 
 async function list(req, res) {
   res.json({ venues: await venueService.list() });
@@ -18,4 +23,4 @@ async function update(req, res) {
   res.json({ venue });
 }
 
-module.exports = { list, get, create, update };
+module.exports = { list, get, create, update, availability };

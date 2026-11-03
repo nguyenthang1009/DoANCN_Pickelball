@@ -14,6 +14,7 @@ const ownVenue = [loadVenue, authorizeVenue('venueId')];
 router.get('/', venues.list);
 router.get('/:venueId', loadVenue, venues.get);
 router.get('/:venueId/courts', loadVenue, courts.listByVenue);
+router.get('/:venueId/availability', loadVenue, venues.availability); // ma trận lịch trống theo ngày
 
 // Admin quản lý cụm sân
 router.post('/', verifyToken, authorize(['ADMIN']), venues.create);

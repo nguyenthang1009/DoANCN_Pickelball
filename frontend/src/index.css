@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+/* Design system "Court" (Figma): teal làm màu chính, lime là màu bóng, nền slate */
+@theme {
+  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ô sân bảo trì: sọc chéo */
+.slot-maintenance {
+  background: repeating-linear-gradient(-45deg, #f1f5f9 0 6px, #cbd5e1 6px 8px);
+}

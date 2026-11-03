@@ -89,6 +89,13 @@ async function replaceForCourt(court, venue, input, actor) {
   });
 }
 
+// BR05: Thứ Bảy, Chủ Nhật và ngày lễ tính giá cuối tuần
+async function resolveDayType(date, db = pool) {
+  const [holidays] = await db.query('SELECT name FROM holidays WHERE holiday_date = ?', [date]);
+  const holiday = holidays[0] ? holidays[0].name : null;
+  return { dayType: holiday || isWeekend(date) ? 'WEEKEND' : 'WEEKDAY', holiday };
+}
+
 // Báo giá một khung giờ: tách thành ô 30 phút, mỗi ô lấy giá theo loại ngày và khung giờ chứa nó
 async function quote(court, venue, { date, start, end }) {
   assertRequired({ date, start, end }, ['date', 'start', 'end']);
@@ -116,11 +123,7 @@ async function quote(court, venue, { date, start, end }) {
     throw new HttpError(400, 'INVALID_DURATION', `Thời lượng đặt phải từ ${minMinutes} đến ${maxMinutes} phút`);
   }
 
-  // BR05: ngày lễ tính giá cuối tuần
-  const [holidays] = await pool.query('SELECT name FROM holidays WHERE holiday_date = ?', [date]);
-  const holiday = holidays[0] ? holidays[0].name : null;
-  const dayType = holiday || isWeekend(date) ? 'WEEKEND' : 'WEEKDAY';
-
+  const { dayType, holiday } = await resolveDayType(date);
   const rules = (await listByCourt(court.id)).filter((r) => r.dayType === dayType);
   const slots = [];
   for (let m = s; m < e; m += 30) {
@@ -141,4 +144,4 @@ async function quote(court, venue, { date, start, end }) {
   };
 }
 
-module.exports = { listByCourt, coverageError, replaceForCourt, quote };
+module.exports = { listByCourt, coverageError, replaceForCourt, resolveDayType, quote };
