@@ -40,11 +40,13 @@ function authorize(roles = []) {
   };
 }
 
-// BR15: Manager/Staff chỉ thao tác trên cơ sở được gán; Admin xem được mọi cơ sở
-function authorizeVenue(paramName = 'venueId') {
+// BR15: Manager/Staff chỉ thao tác trên cơ sở được gán; Admin xem được mọi cơ sở.
+// Tham số là tên param chứa venueId, hoặc hàm lấy venueId từ req (VD: req => req.court.venueId).
+function authorizeVenue(source = 'venueId') {
+  const getVenueId = typeof source === 'function' ? source : (req) => req.params[source];
   return (req, res, next) => {
     if (req.user.role === 'ADMIN') return next();
-    if (Number(req.params[paramName]) !== req.user.venueId) {
+    if (Number(getVenueId(req)) !== req.user.venueId) {
       throw new HttpError(403, 'FORBIDDEN', 'Bạn chỉ được thao tác trên cơ sở của mình');
     }
     next();

@@ -60,3 +60,28 @@ INSERT INTO services (venue_id, name, category, unit, unit_price) VALUES
 (1, 'Nước suối Aquafina', 'DRINK', 'Chai', 10000),
 (1, 'Thuê vợt Pickleball Carbon', 'EQUIPMENT', 'Lượt', 50000),
 (1, 'Bóng thi đấu Franklin X-40', 'EQUIPMENT', 'Quả', 60000);
+
+-- 8. Cơ sở Thủ Đức: 3 sân con, bảng giá riêng (rẻ hơn Quận 7) và dịch vụ tại quầy
+INSERT INTO courts (id, venue_id, name, court_type, status) VALUES
+(5, 2, 'Sân A1 (Trong nhà)', 'INDOOR', 'ACTIVE'),
+(6, 2, 'Sân A2 (Trong nhà)', 'INDOOR', 'ACTIVE'),
+(7, 2, 'Sân B1 (Ngoài trời)', 'OUTDOOR', 'ACTIVE');
+
+INSERT INTO price_rules (court_id, day_type, start_time, end_time, price_per_hour, updated_by) VALUES
+(5, 'WEEKDAY', '06:00:00', '17:00:00', 100000, 1),
+(5, 'WEEKDAY', '17:00:00', '22:00:00', 160000, 1),
+(5, 'WEEKEND', '06:00:00', '17:00:00', 130000, 1),
+(5, 'WEEKEND', '17:00:00', '22:00:00', 200000, 1),
+(6, 'WEEKDAY', '06:00:00', '17:00:00', 100000, 1),
+(6, 'WEEKDAY', '17:00:00', '22:00:00', 160000, 1),
+(6, 'WEEKEND', '06:00:00', '17:00:00', 130000, 1),
+(6, 'WEEKEND', '17:00:00', '22:00:00', 200000, 1),
+(7, 'WEEKDAY', '06:00:00', '17:00:00', 100000, 1),
+(7, 'WEEKDAY', '17:00:00', '22:00:00', 160000, 1),
+(7, 'WEEKEND', '06:00:00', '17:00:00', 130000, 1),
+(7, 'WEEKEND', '17:00:00', '22:00:00', 200000, 1);
+
+INSERT INTO services (venue_id, name, category, unit, unit_price) VALUES
+(2, 'Nước điện giải Revive', 'DRINK', 'Chai', 15000),
+(2, 'Nước suối Aquafina', 'DRINK', 'Chai', 10000),
+(2, 'Thuê vợt Pickleball Carbon', 'EQUIPMENT', 'Lượt', 50000);
