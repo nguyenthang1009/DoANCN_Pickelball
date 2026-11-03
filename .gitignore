@@ -1,0 +1,20 @@
+# Bí mật và cấu hình máy cá nhân: không bao giờ commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Thư viện, bản build, log
+node_modules/
+dist/
+*.log
+
+# Cấu hình công cụ trên máy (Claude Code, IDE)
+.claude/
+.vscode/
+.idea/
+
+# Bản sao lưu / xuất CSDL có thể chứa dữ liệu thật
+*.sql.bak
+*.dump
