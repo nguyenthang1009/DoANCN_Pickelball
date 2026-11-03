@@ -23,12 +23,15 @@ export default function SlotMatrix({ courts, selection, onCellClick, compact = f
   const label = compact ? 76 : 112;
   const cols = `${label}px repeat(${slotsCount}, minmax(${compact ? 16 : 30}px, 1fr))`;
 
+  // Nhãn giờ nằm nổi (absolute) để không ép độ rộng cột; bản POS co vừa khung, bản khách cuộn ngang trên màn hẹp
   return (
-    <div className="overflow-x-auto">
-      <div className="grid min-w-max gap-0.5" style={{ gridTemplateColumns: cols }} role="grid" aria-label="Ma trận lịch sân">
+    <div className="overflow-x-auto overflow-y-hidden pb-1">
+      <div className={`grid gap-0.5 ${compact ? '' : 'min-w-max'}`} style={{ gridTemplateColumns: cols }} role="grid" aria-label="Ma trận lịch sân">
         <div className="sticky left-0 z-10 bg-white" />
         {courts[0].slots.map((s, i) => (
-          <div key={s.start} className="h-5 text-[11px] text-slate-600">{i % 2 === 0 && (compact ? i % 4 === 0 : true) ? s.start : ''}</div>
+          <div key={s.start} className="relative h-5 text-[11px] text-slate-600">
+            {i % 2 === 0 && (compact ? i % 4 === 0 : true) && <span className="absolute left-0 whitespace-nowrap">{s.start}</span>}
+          </div>
         ))}
         {courts.map((court) => (
           <Row key={court.id} court={court} selection={selection} onCellClick={onCellClick} compact={compact} />
@@ -44,7 +47,7 @@ function Row({ court, selection, onCellClick, compact }) {
     <>
       <div className={`sticky left-0 z-10 flex ${height} flex-col justify-center bg-white pr-2`} role="rowheader">
         <span className={`${compact ? 'text-sm' : ''} font-semibold leading-tight`}>{court.name.replace(/\s*\(.*\)/, '')}</span>
-        <span className="text-xs text-slate-600">{court.status === 'ACTIVE' ? (court.courtType === 'INDOOR' ? 'Trong nhà' : 'Ngoài trời') : 'Đang bảo trì'}</span>
+        <span className="text-xs text-slate-600">{court.status === 'ACTIVE' ? (court.courtType === 'INDOOR' ? 'Trong nhà' : 'Ngoài trời') : compact ? 'Bảo trì' : 'Đang bảo trì'}</span>
       </div>
       {court.slots.map((slot, i) => {
         const selected = selection && selection.courtId === court.id && i >= selection.startIdx && i <= selection.endIdx;

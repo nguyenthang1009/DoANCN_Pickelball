@@ -76,4 +76,18 @@ async function createInternalUser({ fullName, email, phone, role, venueId }) {
   }
 }
 
-module.exports = { toPublicUser, findById, listUsers, createInternalUser, rethrowDuplicate };
+// G7, US-A03: Admin khóa / mở khóa tài khoản; không tự khóa chính mình
+async function setActive(id, isActive, actor) {
+  if (typeof isActive !== 'boolean') throw new HttpError(400, 'VALIDATION_ERROR', 'isActive phải là true hoặc false');
+  if (id === actor.id) throw new HttpError(409, 'CANNOT_LOCK_SELF', 'Không thể tự khóa tài khoản của mình');
+  const user = await findById(id);
+  if (!user) throw new HttpError(404, 'USER_NOT_FOUND', 'Không tìm thấy tài khoản');
+  await pool.query('UPDATE users SET is_active = ? WHERE id = ?', [isActive, id]);
+  await pool.query(
+    'INSERT INTO audit_logs (actor_id, venue_id, action_type, entity_type, entity_id, old_values, new_values) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [actor.id, user.venueId, isActive ? 'UNLOCK_USER' : 'LOCK_USER', 'USER', id, JSON.stringify({ isActive: user.isActive }), JSON.stringify({ isActive })],
+  );
+  return findById(id);
+}
+
+module.exports = { toPublicUser, findById, listUsers, createInternalUser, setActive, rethrowDuplicate };

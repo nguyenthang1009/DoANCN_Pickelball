@@ -17,4 +17,12 @@ async function listVenueStaff(req, res) {
   res.json({ venueId, users });
 }
 
-module.exports = { listUsers, createInternalUser, listVenueStaff };
+async function setActive(req, res) {
+  res.json({ user: await userService.setActive(Number(req.params.id), (req.body || {}).isActive, req.user) });
+}
+
+async function listAllVenues(req, res) {
+  res.json({ venues: await require('../services/venue.service').list({ includeInactive: true }) });
+}
+
+module.exports = { listUsers, createInternalUser, listVenueStaff, setActive, listAllVenues };

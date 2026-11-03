@@ -1,7 +1,14 @@
 const bookingService = require('../services/booking.service');
+const serviceOrderService = require('../services/serviceOrder.service');
 
+// Màn POS: nhân sự đặt sân cho khách vãng lai, bán kèm dịch vụ trong cùng transaction
 async function create(req, res) {
-  const booking = await bookingService.createBooking(req.user, req.body || {});
+  const body = req.body || {};
+  const items = Array.isArray(body.services) && body.services.length && req.user.role !== 'CUSTOMER' ? body.services : null;
+  const extra = items
+    ? (conn, b) => serviceOrderService.createOrder(conn, { venueId: b.venueId, bookingId: b.id, soldBy: req.user.id, paymentMethod: b.paymentMethod, items })
+    : undefined;
+  const booking = await bookingService.createBooking(req.user, body, { extra });
   res.status(201).json({ booking });
 }
 

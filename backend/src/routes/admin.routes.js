@@ -8,5 +8,7 @@ const router = Router();
 router.use(verifyToken, authorize(['ADMIN']));
 router.get('/users', users.listUsers);
 router.post('/users', users.createInternalUser);
+router.patch('/users/:id', users.setActive);
+router.get('/venues', users.listAllVenues);
 
 module.exports = router;

@@ -22,10 +22,13 @@ export const isWeekendDate = (date) => [0, 6].includes(dow(date));
 export const dayMonth = (date) => `${date.slice(8, 10)}/${date.slice(5, 7)}`;
 export const fullDate = (date) => `${LONG[dow(date)]}, ${dayMonth(date)}/${date.slice(0, 4)}`;
 
-// "2026-11-02 18:00:00" hoặc ISO -> "02/11/2026 18:00"
+// Mốc thời gian từ API -> "02/11/2026 18:00" theo giờ Việt Nam.
+// Cột TIMESTAMP được trả về dạng ISO UTC (có Z) nên cộng 7 giờ; chuỗi không có múi giờ coi là giờ Việt Nam.
 export function dateTime(value) {
   if (!value) return '';
-  const s = String(value).replace('T', ' ');
+  let s = String(value);
+  if (/[zZ]$|[+-]\d{2}:\d{2}$/.test(s)) s = new Date(Date.parse(s) + 7 * 3600 * 1000).toISOString();
+  s = s.replace('T', ' ');
   return `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)} ${s.slice(11, 16)}`;
 }
 
