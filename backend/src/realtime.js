@@ -1,16 +1,21 @@
 const { Server } = require('socket.io');
+const { corsOrigins } = require('./config/env');
 
 let io = null;
 const room = (venueId, date) => `slots:${venueId}:${date}`;
+const bookingRoom = (code) => `booking:${code}`;
 
 // Mỗi màn hình ma trận theo dõi đúng một cơ sở + một ngày; khi ô đổi trạng thái, server báo cho phòng đó tải lại
 function init(httpServer) {
-  io = new Server(httpServer, { cors: { origin: true } });
+  io = new Server(httpServer, { cors: { origin: corsOrigins, credentials: true } });
   io.on('connection', (socket) => {
     socket.on('watch', ({ venueId, date } = {}) => {
       for (const r of socket.rooms) if (r.startsWith('slots:')) socket.leave(r);
       if (venueId && date) socket.join(room(venueId, date));
     });
+    // Chỉ màn hình đang mở đúng đơn mới nhận tin của đơn đó
+    socket.on('watch-booking', (code) => { if (typeof code === 'string') socket.join(bookingRoom(code)); });
+    socket.on('unwatch-booking', (code) => { if (typeof code === 'string') socket.leave(bookingRoom(code)); });
   });
   return io;
 }
@@ -21,7 +26,7 @@ function emitSlotsChanged(venueId, date, reason) {
 
 // Báo cho trang thanh toán của đúng một đơn (đã thanh toán, hết hạn...)
 function emitBookingChanged(bookingCode, status) {
-  if (io) io.emit(`booking:${bookingCode}`, { bookingCode, status });
+  if (io) io.to(bookingRoom(bookingCode)).emit(bookingRoom(bookingCode), { bookingCode, status });
 }
 
 module.exports = { init, emitSlotsChanged, emitBookingChanged };

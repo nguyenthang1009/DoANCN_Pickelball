@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../../lib/api';
-import { fullDate, vnd } from '../../lib/format';
+import { fullDate, minutesOf, vnd } from '../../lib/format';
 import { useBookingWatch } from '../../lib/socket';
 import { Alert, Card, CheckinBadge, PaymentBadge, Spinner } from '../../components/ui';
 
@@ -16,8 +16,8 @@ export default function Ticket() {
   useBookingWatch(code, load);
 
   if (!booking) return error ? <Alert>{error}</Alert> : <Spinner />;
-  const [h, m] = booking.startTime.split(':').map(Number);
-  const opens = `${String(Math.floor((h * 60 + m - 30) / 60)).padStart(2, '0')}:${String((h * 60 + m - 30) % 60).padStart(2, '0')}`;
+  const opensAt = minutesOf(booking.startTime) - booking.checkinEarlyMinutes;
+  const opens = `${String(Math.floor(opensAt / 60)).padStart(2, '0')}:${String(opensAt % 60).padStart(2, '0')}`;
 
   return (
     <div className="mx-auto flex max-w-sm flex-col gap-4">
@@ -42,7 +42,8 @@ export default function Ticket() {
           <div className="flex items-center justify-between"><span className="text-slate-600">Check-in</span><CheckinBadge status={booking.checkinStatus} /></div>
         </div>
       </Card>
-      <p className="rounded-lg bg-white px-3 py-2 text-xs text-slate-600">Đưa mã QR cho lễ tân từ {opens}. Hủy online được đến trước giờ chơi 24 giờ, tiền hoàn trong 1–3 ngày.</p>
+      <p className="rounded-lg bg-white px-3 py-2 text-xs text-slate-600">Đưa mã QR cho lễ tân từ {opens}. Hủy online được đến trước giờ chơi {booking.cancelDeadlineHours} giờ, quản lý cơ sở sẽ xử lý hoàn tiền.</p>
+      {booking.invoiceNo && <Link to={`/hoa-don/${booking.invoiceNo}`} className="text-center text-sm font-semibold text-teal-700">Xem hóa đơn {booking.invoiceNo}</Link>}
       <Link to="/lich-dat" className="text-center text-sm font-semibold text-teal-700">← Lịch đặt của tôi</Link>
     </div>
   );

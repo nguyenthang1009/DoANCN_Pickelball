@@ -5,12 +5,13 @@ const items = require('../controllers/serviceItem.controller');
 const users = require('../controllers/user.controller');
 const bookings = require('../controllers/booking.controller');
 const reports = require('../controllers/report.controller');
-const { verifyToken, authorize, authorizeVenue } = require('../middlewares/auth.middleware');
+const { verifyToken, can, authorizeVenue } = require('../middlewares/auth.middleware');
 const { loadVenue } = require('../middlewares/load.middleware');
 
 const router = Router();
-const managers = [verifyToken, authorize(['ADMIN', 'MANAGER'])];
 const ownVenue = [loadVenue, authorizeVenue('venueId')];
+// Có quyền và thuộc đúng cơ sở (BR15)
+const inVenue = (code) => [verifyToken, can(code), ...ownVenue];
 
 // Công khai: khách xem cơ sở và sân con trước khi đặt
 router.get('/', venues.list);
@@ -19,15 +20,15 @@ router.get('/:venueId/courts', loadVenue, courts.listByVenue);
 router.get('/:venueId/availability', loadVenue, venues.availability); // ma trận lịch trống theo ngày
 
 // Admin quản lý cụm sân
-router.post('/', verifyToken, authorize(['ADMIN']), venues.create);
-router.patch('/:venueId', verifyToken, authorize(['ADMIN']), loadVenue, venues.update);
+router.post('/', verifyToken, can('venue.manage'), venues.create);
+router.patch('/:venueId', verifyToken, can('venue.manage'), loadVenue, venues.update);
 
 // Manager (cơ sở của mình) và Admin quản lý sân con, dịch vụ
-router.post('/:venueId/courts', ...managers, ...ownVenue, courts.create);
-router.get('/:venueId/services', verifyToken, authorize(['ADMIN', 'MANAGER', 'STAFF']), ...ownVenue, items.list);
-router.post('/:venueId/services', ...managers, ...ownVenue, items.create);
-router.get('/:venueId/staff', ...managers, ...ownVenue, users.listVenueStaff);
-router.get('/:venueId/bookings', verifyToken, authorize(['ADMIN', 'MANAGER', 'STAFF']), ...ownVenue, bookings.listByVenue);
-router.post('/:venueId/service-orders', verifyToken, authorize(['ADMIN', 'MANAGER', 'STAFF']), ...ownVenue, reports.sellServices);
+router.post('/:venueId/courts', ...inVenue('court.manage'), courts.create);
+router.get('/:venueId/services', ...inVenue('service.view'), items.list);
+router.post('/:venueId/services', ...inVenue('service.manage'), items.create);
+router.get('/:venueId/staff', ...inVenue('staff.view'), users.listVenueStaff);
+router.get('/:venueId/bookings', ...inVenue('booking.view_venue'), bookings.listByVenue);
+router.post('/:venueId/service-orders', ...inVenue('pos.sell'), reports.sellServices);
 
 module.exports = router;

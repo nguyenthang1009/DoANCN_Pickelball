@@ -6,6 +6,7 @@ const { payos } = require('../config/env');
 const realtime = require('../realtime');
 const audit = require('./audit.service');
 const bookingService = require('./booking.service');
+const invoiceService = require('./invoice.service');
 
 const hmac = (text) => crypto.createHmac('sha256', payos.checksumKey).update(text).digest('hex');
 
@@ -139,8 +140,11 @@ async function handleWebhook(body) {
         "UPDATE bookings SET payment_status = 'PAID', payment_method = 'VIETQR', hold_expires_at = NULL, qr_signature = ?, cancelled_at = NULL, cancelled_by = NULL, cancel_reason = NULL WHERE id = ?",
         [bookingService.signBookingCode(b.booking_code), b.id],
       );
-    } else if (newStatus === 'CONFLICT_REFUND_PENDING') {
-      await conn.query("UPDATE bookings SET payment_status = 'CONFLICT_REFUND_PENDING' WHERE id = ?", [b.id]);
+      await invoiceService.issueForBooking(conn, b.id, null);
+    } else {
+      // Tiền đã về tài khoản nhưng không thành doanh thu: ghi là khoản giữ hộ khách, chờ hoàn
+      if (newStatus === 'CONFLICT_REFUND_PENDING') await conn.query("UPDATE bookings SET payment_status = 'CONFLICT_REFUND_PENDING' WHERE id = ?", [b.id]);
+      await invoiceService.postHeldReceipt(conn, { txnId: txn.id, bookingCode: b.booking_code, venueId: b.venue_id, amount: txn.amount });
     }
     await audit.log(conn, { actorId: null, venueId: b.venue_id, actionType: 'PAYOS_WEBHOOK', entityType: 'BOOKING', entityId: b.id, oldValues: { paymentStatus: b.payment_status }, newValues: { paymentStatus: newStatus, orderCode: data.orderCode, amount: data.amount } });
     return { result: newStatus, booking: b };

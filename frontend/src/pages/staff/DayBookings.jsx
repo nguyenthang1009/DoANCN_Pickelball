@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { useFeedback } from '../../lib/feedback';
 import { todayVN, vnd } from '../../lib/format';
 import { useSlotsWatch } from '../../lib/socket';
 import { useVenueScope } from '../../lib/useVenueScope';
@@ -9,7 +10,8 @@ import { Alert, Button, Card, CheckinBadge, Input, PaymentBadge, Spinner } from 
 
 // Danh sách đơn trong ngày của cơ sở; Manager/Admin hủy được đơn (chuyển chờ hoàn tiền)
 export default function DayBookings() {
-  const { user } = useAuth();
+  const { can } = useAuth();
+  const { notify, confirm } = useFeedback();
   const scope = useVenueScope();
   const [date, setDate] = useState(todayVN());
   const [list, setList] = useState(null);
@@ -21,12 +23,25 @@ export default function DayBookings() {
   useSlotsWatch(scope.venueId, date, load);
 
   async function cancel(b) {
-    const reason = b.paymentStatus === 'PAID' ? window.prompt(`Lý do hủy đơn ${b.bookingCode} (khách sẽ được hoàn tiền):`) : 'Hủy giữ chỗ tại quầy';
-    if (!reason) return;
-    try { await api(`/bookings/${b.bookingCode}/cancel`, { method: 'POST', body: { reason } }); load(); } catch (e) { setError(e.message); }
+    const paid = b.paymentStatus === 'PAID';
+    const answer = await confirm({
+      title: paid ? 'Hủy đơn đã thanh toán?' : 'Hủy giữ chỗ?',
+      message: paid ? 'Đơn chuyển sang chờ hoàn tiền. Thao tác này không hoàn tác được.' : 'Ô lịch sẽ mở lại ngay.',
+      details: [['Mã đơn', b.bookingCode], ['Khách', b.customerName], ['Số tiền', vnd(b.totalAmount)]],
+      tone: 'danger',
+      confirmText: 'Hủy đơn',
+      cancelText: 'Giữ lại',
+      input: paid ? { label: 'Lý do hủy', placeholder: 'VD: Khách báo bận đột xuất' } : undefined,
+    });
+    if (!answer) return;
+    try {
+      await api(`/bookings/${b.bookingCode}/cancel`, { method: 'POST', body: { reason: paid ? answer : 'Hủy giữ chỗ tại quầy' } });
+      notify.success(`Đã hủy đơn ${b.bookingCode}`);
+      load();
+    } catch (e) { notify.error(e.message); }
   }
 
-  const canCancel = user.role !== 'STAFF';
+  const canCancel = can('booking.cancel');
   return (
     <div>
       <PageHeader title="Đơn trong ngày" subtitle={list ? `${list.length} đơn` : ''} scope={scope}>

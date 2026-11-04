@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api';
+import { useFeedback } from '../../lib/feedback';
 import { dateTime, fullDate, vnd } from '../../lib/format';
 import { useVenueScope } from '../../lib/useVenueScope';
 import PageHeader from '../../components/PageHeader';
@@ -10,7 +11,7 @@ export default function Refunds() {
   const scope = useVenueScope();
   const [list, setList] = useState(null);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const { notify, confirm: ask } = useFeedback();
   const load = useCallback(() => {
     const q = scope.isAdmin && scope.venueId ? `?venueId=${scope.venueId}` : '';
     api(`/bookings/refunds${q}`).then((d) => setList(d.bookings)).catch((e) => setError(e.message));
@@ -18,17 +19,26 @@ export default function Refunds() {
   useEffect(() => { load(); }, [load]);
 
   async function confirm(b) {
-    const note = window.prompt(`Ghi chú hoàn ${vnd(b.totalAmount)} cho ${b.customerName} (VD: mã giao dịch chuyển khoản):`, 'Đã chuyển khoản hoàn tiền');
+    const note = await ask({
+      title: 'Xác nhận đã hoàn tiền?',
+      message: 'Chỉ xác nhận sau khi đã chuyển trả tiền cho khách. Thao tác này không hoàn tác được.',
+      details: [['Mã đơn', b.bookingCode], ['Khách', b.customerName], ['Số tiền hoàn', vnd(b.totalAmount)]],
+      tone: 'warning',
+      confirmText: 'Đã hoàn tiền',
+      input: { label: 'Ghi chú (VD: mã giao dịch chuyển khoản)', defaultValue: 'Đã chuyển khoản hoàn tiền' },
+    });
     if (!note) return;
-    setError(''); setNotice('');
-    try { await api(`/bookings/${b.bookingCode}/refund`, { method: 'POST', body: { note } }); setNotice(`Đã xác nhận hoàn tiền đơn ${b.bookingCode}`); load(); } catch (e) { setError(e.message); }
+    try {
+      await api(`/bookings/${b.bookingCode}/refund`, { method: 'POST', body: { note } });
+      notify.success(`Đã xác nhận hoàn tiền đơn ${b.bookingCode}`);
+      load();
+    } catch (e) { notify.error(e.message); }
   }
 
   return (
     <div>
       <PageHeader title="Hoàn tiền" subtitle="Xác nhận sau khi đã chuyển trả tiền cho khách" scope={scope} allowAll />
       <Alert>{error}</Alert>
-      <Alert kind="success">{notice}</Alert>
       <Card className="mt-4 overflow-x-auto p-0">
         {!list ? <Spinner /> : (
           <table className="w-full text-left text-sm">

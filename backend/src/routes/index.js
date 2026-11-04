@@ -12,5 +12,11 @@ router.use('/bookings', require('./booking.routes'));
 router.use('/payments', require('./payment.routes'));
 router.use('/checkin', require('./checkin.routes'));
 router.use('/reports', require('./report.routes'));
+const finance = require('./finance.routes');
+
+router.use('/invoices', finance.invoices);
+router.use('/finance', finance.reports);
+router.use('/payroll', finance.salary);
+router.use('/site', finance.content);
 
 module.exports = router;

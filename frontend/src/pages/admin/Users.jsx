@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { useFeedback } from '../../lib/feedback';
 import PageHeader from '../../components/PageHeader';
-import { Alert, Badge, Button, Card, Input, Select, Spinner } from '../../components/ui';
+import { Alert, Badge, Button, Card, Input, Modal, Select, Spinner } from '../../components/ui';
 
 const ROLE = { ADMIN: 'Admin', MANAGER: 'Quản lý', STAFF: 'Lễ tân', CUSTOMER: 'Khách hàng' };
 
 // US-A02, US-A03: Admin tạo tài khoản nội bộ (mật khẩu tạm, bắt đổi lần đầu), khóa / mở khóa
 export default function Users() {
-  const { user: me } = useAuth();
+  const { user: me, can } = useAuth();
+  const { notify, confirm } = useFeedback();
   const [users, setUsers] = useState(null);
+  const [roles, setRoles] = useState([]);
+  const [assigning, setAssigning] = useState(null);
   const [venues, setVenues] = useState([]);
   const [filter, setFilter] = useState('');
   const [form, setForm] = useState({ fullName: '', email: '', phone: '', role: 'STAFF', venueId: '' });
@@ -18,6 +22,7 @@ export default function Users() {
   const load = useCallback(() => { api(`/admin/users${filter ? `?role=${filter}` : ''}`).then((d) => setUsers(d.users)).catch((e) => setError(e.message)); }, [filter]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { api('/admin/venues').then((d) => setVenues(d.venues)).catch(() => {}); }, []);
+  useEffect(() => { if (can('role.manage')) api('/admin/roles').then((d) => setRoles(d.roles.filter((r) => r.baseRole !== 'CUSTOMER'))).catch(() => {}); }, [can]);
   const venueName = (id) => venues.find((v) => v.id === id)?.name || '—';
 
   async function create(e) {
@@ -26,14 +31,46 @@ export default function Users() {
     try {
       const r = await api('/admin/users', { method: 'POST', body: { ...form, venueId: form.venueId ? Number(form.venueId) : undefined } });
       setCreated(r);
+      notify.success(`Đã tạo tài khoản ${r.user.fullName}`);
       setForm({ fullName: '', email: '', phone: '', role: 'STAFF', venueId: '' });
       load();
-    } catch (err) { setError(err.message); }
+    } catch (err) { notify.error(err.message); }
   }
 
   async function toggle(u) {
-    setError('');
-    try { await api(`/admin/users/${u.id}`, { method: 'PATCH', body: { isActive: !u.isActive } }); load(); } catch (e) { setError(e.message); }
+    const ok = await confirm({
+      title: u.isActive ? `Khóa tài khoản ${u.fullName}?` : `Mở khóa ${u.fullName}?`,
+      message: u.isActive ? 'Tài khoản bị đăng xuất ngay và không đăng nhập được nữa.' : 'Tài khoản sẽ đăng nhập lại được.',
+      details: [['Email', u.email], ['Vai trò', u.roleName]],
+      tone: u.isActive ? 'danger' : 'primary',
+      confirmText: u.isActive ? 'Khóa tài khoản' : 'Mở khóa',
+    });
+    if (!ok) return;
+    try {
+      await api(`/admin/users/${u.id}`, { method: 'PATCH', body: { isActive: !u.isActive } });
+      notify.success(`${u.isActive ? 'Đã khóa' : 'Đã mở khóa'} ${u.fullName}`);
+      load();
+    } catch (e) { notify.error(e.message); }
+  }
+
+  const assignedRole = roles.find((r) => r.id === Number(assigning?.roleId));
+
+  async function assign() {
+    const target = assigning;
+    const ok = await confirm({
+      title: `Đổi vai trò ${target.user.fullName}?`,
+      message: 'Quyền mới có hiệu lực ngay với tài khoản này.',
+      details: [['Vai trò cũ', target.user.roleName], ['Vai trò mới', assignedRole.name]],
+      tone: 'warning',
+      confirmText: 'Đổi vai trò',
+    });
+    if (!ok) return;
+    setAssigning(null);
+    try {
+      await api(`/admin/users/${target.user.id}/role`, { method: 'PATCH', body: { roleId: Number(target.roleId), venueId: target.venueId ? Number(target.venueId) : undefined } });
+      notify.success(`${target.user.fullName} giờ là ${assignedRole.name}`);
+      load();
+    } catch (e) { notify.error(e.message); }
   }
 
   return (
@@ -56,10 +93,15 @@ export default function Users() {
                   <tr key={u.id} className="border-t border-slate-200">
                     <td className="px-4 py-3 font-medium">{u.fullName}{u.mustChangePassword && <div className="text-xs text-amber-700">Chưa đổi mật khẩu tạm</div>}</td>
                     <td className="px-4 py-3">{u.email}<div className="text-xs text-slate-600">{u.phone}</div></td>
-                    <td className="px-4 py-3">{ROLE[u.role]}</td>
+                    <td className="px-4 py-3">{u.roleName}</td>
                     <td className="px-4 py-3">{u.venueId ? venueName(u.venueId) : '—'}</td>
                     <td className="px-4 py-3"><Badge tone={u.isActive ? 'green' : 'red'}>{u.isActive ? 'Hoạt động' : 'Đã khóa'}</Badge></td>
-                    <td className="px-4 py-3 text-right">{u.id !== me.id && <Button kind="secondary" className="px-3 py-1 text-sm" onClick={() => toggle(u)}>{u.isActive ? 'Khóa' : 'Mở khóa'}</Button>}</td>
+                    <td className="px-4 py-3 text-right">{u.id !== me.id && (
+                      <div className="flex justify-end gap-2">
+                        {u.role !== 'CUSTOMER' && roles.length > 0 && <Button kind="ghost" className="px-3 py-1 text-sm" onClick={() => setAssigning({ user: u, roleId: u.roleId, venueId: u.venueId ?? '' })}>Đổi vai trò</Button>}
+                        <Button kind="secondary" className="px-3 py-1 text-sm" onClick={() => toggle(u)}>{u.isActive ? 'Khóa' : 'Mở khóa'}</Button>
+                      </div>
+                    )}</td>
                   </tr>
                 ))}
               </tbody>
@@ -85,6 +127,25 @@ export default function Users() {
           </form>
         </Card>
       </div>
+      {assigning && (
+        <Modal
+          title={`Đổi vai trò: ${assigning.user.fullName}`}
+          onClose={() => setAssigning(null)}
+          footer={<><Button kind="ghost" onClick={() => setAssigning(null)}>Đóng</Button><Button onClick={assign}>Lưu</Button></>}
+        >
+          <div className="flex flex-col gap-3">
+            <Select label="Vai trò" value={assigning.roleId} onChange={(e) => setAssigning({ ...assigning, roleId: e.target.value })}>
+              {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </Select>
+            {assignedRole?.baseRole !== 'ADMIN' && (
+              <Select label="Cơ sở" value={assigning.venueId} onChange={(e) => setAssigning({ ...assigning, venueId: e.target.value })}>
+                <option value="">Chọn cơ sở</option>
+                {venues.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </Select>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

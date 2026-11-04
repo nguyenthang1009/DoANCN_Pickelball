@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../../lib/api';
+import { useFeedback } from '../../lib/feedback';
 import { vnd } from '../../lib/format';
 import { useBookingWatch } from '../../lib/socket';
 import BookingSummary from '../../components/BookingSummary';
@@ -16,6 +17,7 @@ export default function Payment() {
   const [payment, setPayment] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  const { notify, confirm } = useFeedback();
 
   const load = useCallback(async () => {
     try {
@@ -32,14 +34,24 @@ export default function Payment() {
   useBookingWatch(code, load);
 
   async function cancel() {
+    const ok = await confirm({ title: 'Hủy giữ chỗ?', message: 'Ô lịch sẽ mở lại cho người khác đặt ngay lập tức.', tone: 'danger', confirmText: 'Hủy giữ chỗ', cancelText: 'Tiếp tục thanh toán' });
+    if (!ok) return;
     setBusy('cancel');
-    try { setBooking((await api(`/bookings/${code}/cancel`, { method: 'POST', body: {} })).booking); setPayment(null); } catch (e) { setError(e.message); } finally { setBusy(''); }
+    try {
+      setBooking((await api(`/bookings/${code}/cancel`, { method: 'POST', body: {} })).booking);
+      setPayment(null);
+      notify.success('Đã hủy giữ chỗ');
+    } catch (e) { notify.error(e.message); } finally { setBusy(''); }
   }
 
   // Chế độ mock: giả lập ngân hàng gửi webhook PayOS báo đã nhận tiền
   async function simulate() {
     setBusy('pay');
-    try { await api(`/payments/mock/${code}/pay`, { method: 'POST', body: {} }); await load(); } catch (e) { setError(e.message); } finally { setBusy(''); }
+    try {
+      await api(`/payments/mock/${code}/pay`, { method: 'POST', body: {} });
+      notify.success('Thanh toán thành công, vé của bạn đã sẵn sàng');
+      await load();
+    } catch (e) { notify.error(e.message); } finally { setBusy(''); }
   }
 
   if (!booking) return error ? <Alert>{error}</Alert> : <Spinner />;
@@ -71,7 +83,7 @@ export default function Payment() {
               )}
             </>
           ) : (
-            <Link to="/" className="font-semibold text-teal-700">← Chọn khung giờ khác</Link>
+            <Link to="/dat-san" className="font-semibold text-teal-700">← Chọn khung giờ khác</Link>
           )}
         </Card>
         <Card>

@@ -1,6 +1,7 @@
 const courtService = require('../services/court.service');
 const venueService = require('../services/venue.service');
 const priceRuleService = require('../services/priceRule.service');
+const bookingService = require('../services/booking.service');
 
 async function listByVenue(req, res) {
   res.json({ venueId: req.venue.id, courts: await courtService.listByVenue(req.venue.id) });
@@ -18,6 +19,10 @@ async function create(req, res) {
 async function update(req, res) {
   const court = await courtService.update(req.court, req.body || {}, req.user);
   res.json({ court });
+}
+
+async function impact(req, res) {
+  res.json({ court: req.court, bookings: await bookingService.courtImpact(req.court) });
 }
 
 async function changeStatus(req, res) {
@@ -45,4 +50,4 @@ async function quote(req, res) {
   res.json(await priceRuleService.quote(req.court, venue, req.query));
 }
 
-module.exports = { listByVenue, get, create, update, changeStatus, remove, listPriceRules, replacePriceRules, quote };
+module.exports = { listByVenue, get, create, update, impact, changeStatus, remove, listPriceRules, replacePriceRules, quote };

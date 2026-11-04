@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { api } from '../../lib/api';
+import { useFeedback } from '../../lib/feedback';
 import BookingSummary from '../../components/BookingSummary';
+import PageHeader from '../../components/PageHeader';
 import { Alert, Button, Card, Input } from '../../components/ui';
 
 // UC11: lễ tân quét QR trên vé (camera) hoặc nhập mã đơn, kiểm tra rồi xác nhận nhận sân
@@ -9,13 +11,13 @@ export default function CheckIn() {
   const [code, setCode] = useState('');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const { notify } = useFeedback();
   const [busy, setBusy] = useState(false);
   const [scanning, setScanning] = useState(false);
   const scanner = useRef(null);
 
   async function lookup(body) {
-    setError(''); setNotice(''); setResult(null);
+    setError(''); setResult(null);
     try { setResult(await api('/checkin/lookup', { method: 'POST', body })); } catch (e) { setError(e.message); }
   }
 
@@ -44,16 +46,13 @@ export default function CheckIn() {
     try {
       const { booking } = await api(`/bookings/${result.booking.bookingCode}/check-in`, { method: 'POST', body: {} });
       setResult({ ...result, booking, canCheckIn: false, reason: null });
-      setNotice(`Đã xác nhận ${booking.customerName} nhận ${booking.courtName}.`);
+      notify.success(`${booking.customerName} đã nhận ${booking.courtName}`);
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Check-in QR</h1>
-        <p className="text-sm text-slate-600">Mở check-in 30 phút trước giờ chơi. Mã QR có chữ ký nên không giả mạo được.</p>
-      </div>
+    <div className="flex flex-col">
+      <PageHeader title="Check-in QR" subtitle="Mở check-in 30 phút trước giờ chơi. Mã QR có chữ ký nên không giả mạo được." />
       <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
         <Card className="flex flex-col gap-4">
           <div className="flex min-h-[320px] flex-col items-center justify-center gap-4 rounded-lg bg-slate-900 p-4 text-white">
@@ -69,7 +68,6 @@ export default function CheckIn() {
         </Card>
         <Card className={`flex flex-col gap-4 ${result?.canCheckIn ? 'border-teal-700' : ''}`}>
           <Alert>{error}</Alert>
-          <Alert kind="success">{notice}</Alert>
           {!result && !error && <p className="text-sm text-slate-600">Kết quả quét sẽ hiện ở đây.</p>}
           {result && (
             <>

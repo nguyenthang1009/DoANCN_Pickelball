@@ -443,6 +443,7 @@
         },
         {
           "name": "Chưa đăng nhập không đặt được",
+          "protocolProfileBehavior": { "disableCookies": true },
           "request": {
             "method": "POST",
             "url": "{{baseUrl}}/bookings",

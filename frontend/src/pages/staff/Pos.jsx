@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api';
+import { useAuth } from '../../lib/auth';
+import { useFeedback } from '../../lib/feedback';
 import { fullDate, todayVN, vnd } from '../../lib/format';
 import { useSlotsWatch } from '../../lib/socket';
 import { useVenueScope } from '../../lib/useVenueScope';
@@ -13,6 +15,9 @@ import { Alert, Button, Card, Input, Spinner } from '../../components/ui';
 export default function Pos() {
   const scope = useVenueScope();
   const { venueId } = scope;
+  const { can } = useAuth();
+  const { notify, confirm } = useFeedback();
+  const [checkedIn, setCheckedIn] = useState(new Set());
   const [date, setDate] = useState(todayVN());
   const [data, setData] = useState(null);
   const [services, setServices] = useState([]);
@@ -20,14 +25,19 @@ export default function Pos() {
   const [guest, setGuest] = useState({ name: '', phone: '' });
   const [cart, setCart] = useState({});
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [qrBooking, setQrBooking] = useState(null);
 
   const load = useCallback(() => {
     if (!venueId) return;
     api(`/venues/${venueId}/availability?date=${date}`).then(setData).catch((e) => setError(e.message));
-  }, [venueId, date]);
+    // Lịch công khai không lộ ai đã đến; danh sách đơn của cơ sở chỉ nhân sự có quyền mới xem được
+    if (can('booking.view_venue')) {
+      api(`/venues/${venueId}/bookings?date=${date}`).then((d) => setCheckedIn(new Set(
+        d.bookings.filter((b) => b.checkinStatus === 'CHECKED_IN').flatMap((b) => b.slots.map((s) => `${s.courtId}_${s.startTime}`)),
+      ))).catch(() => {});
+    }
+  }, [venueId, date, can]);
   useEffect(() => { setData(null); setSelection(null); load(); }, [load]);
   useEffect(() => { if (venueId) api(`/venues/${venueId}/services`).then((d) => setServices(d.services)).catch(() => {}); }, [venueId]);
   useSlotsWatch(venueId, date, load);
@@ -52,16 +62,26 @@ export default function Pos() {
   function reset() { setSelection(null); setCart({}); setGuest({ name: '', phone: '' }); }
 
   async function submit(paymentMethod) {
-    setError(''); setNotice(''); setBusy(true);
+    if (paymentMethod === 'CASH') {
+      const ok = await confirm({
+        title: 'Xác nhận thu tiền mặt',
+        message: 'Đơn sẽ được tạo và tính vào doanh thu ca của bạn.',
+        details: [['Khách', `${guest.name.trim()} · ${guest.phone}`], ['Sân', court.name], ['Giờ chơi', `${picked[0].start}–${picked.at(-1).end}`], ['Tổng thu', vnd(courtTotal + serviceTotal)]],
+        confirmText: 'Đã thu tiền',
+        cancelText: 'Xem lại',
+      });
+      if (!ok) return;
+    }
+    setBusy(true);
     try {
       const { booking } = await api('/bookings', {
         method: 'POST',
         body: { courtId: court.id, date, start: picked[0].start, end: picked.at(-1).end, guestName: guest.name.trim(), guestPhone: guest.phone, paymentMethod, services: cartItems(cart) },
       });
-      if (paymentMethod === 'CASH') { setNotice(`Đã thu ${vnd(booking.totalAmount)} tiền mặt · đơn ${booking.bookingCode} · ${booking.courtName} ${booking.startTime}–${booking.endTime}`); reset(); }
+      if (paymentMethod === 'CASH') { notify.success(`Đã thu ${vnd(booking.totalAmount)} tiền mặt · đơn ${booking.bookingCode}`); reset(); }
       else setQrBooking(booking);
       load();
-    } catch (e) { setError(e.message); load(); } finally { setBusy(false); }
+    } catch (e) { notify.error(e.message); load(); } finally { setBusy(false); }
   }
 
   const ready = picked.length * 30 >= (data?.limits.minMinutes ?? 60) && guest.name.trim() && phoneOk;
@@ -74,17 +94,16 @@ export default function Pos() {
       <div className="grid gap-4 xl:grid-cols-[1fr_380px]">
         <div className="flex min-w-0 flex-col gap-4">
           <Alert>{error}</Alert>
-          <Alert kind="success">{notice}</Alert>
           <Card className="p-4">
             <p className="mb-2 font-semibold">Lịch sân {data?.venue.name}</p>
-            {data ? <SlotMatrix courts={data.courts} selection={selection} onCellClick={onCellClick} compact /> : <Spinner />}
+            {data ? <SlotMatrix courts={data.courts} selection={selection} onCellClick={onCellClick} compact checkedIn={checkedIn} /> : <Spinner />}
           </Card>
-          <Legend />
+          <Legend showCheckedIn />
         </div>
         <Card className="flex flex-col gap-3 p-4">
           <h2 className="text-xl font-semibold">Đơn mới tại quầy</h2>
           {qrBooking ? (
-            <QrPayPanel booking={qrBooking} onPaid={(b) => { setNotice(`Đã nhận chuyển khoản ${vnd(b.totalAmount)} · đơn ${b.bookingCode}`); setQrBooking(null); reset(); load(); }} onClose={() => { setQrBooking(null); reset(); }} />
+            <QrPayPanel booking={qrBooking} onPaid={(b) => { notify.success(`Đã nhận chuyển khoản ${vnd(b.totalAmount)} · đơn ${b.bookingCode}`); setQrBooking(null); reset(); load(); }} onClose={() => { setQrBooking(null); reset(); }} />
           ) : (
             <>
               <div className="grid grid-cols-2 gap-2">

@@ -1,16 +1,17 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
-const { jwt: jwtConfig, bcryptRounds } = require('../config/env');
+const { jwt: jwtConfig, session, bcryptRounds } = require('../config/env');
 const HttpError = require('../utils/httpError');
 const { isEmail, isPhone, assertPassword, assertRequired } = require('../utils/validators');
-const { toPublicUser, findById, rethrowDuplicate } = require('./user.service');
+const { findById, rethrowDuplicate } = require('./user.service');
+const sessionService = require('./session.service');
 
 function signToken(user) {
   return jwt.sign(
     { sub: user.id, role: user.role, venueId: user.venueId },
     jwtConfig.secret,
-    { expiresIn: jwtConfig.expiresIn },
+    { expiresIn: `${session.accessMinutes}m` },
   );
 }
 
@@ -50,7 +51,7 @@ async function login({ identifier, password }) {
   // G7, US-A03: tài khoản bị khóa không được đăng nhập
   if (!row.is_active) throw new HttpError(403, 'ACCOUNT_LOCKED', 'Tài khoản đã bị khóa');
 
-  const user = toPublicUser(row);
+  const user = await findById(row.id);
   return { token: signToken(user), user };
 }
 
@@ -72,6 +73,7 @@ async function changePassword(userId, { currentPassword, newPassword }) {
     'UPDATE users SET password_hash = ?, must_change_password = FALSE, password_reset_token = NULL, password_reset_expires = NULL WHERE id = ?',
     [hash, userId],
   );
+  await sessionService.revokeAllForUser(userId); // đăng xuất các thiết bị khác
   const user = await findById(userId);
   return { token: signToken(user), user };
 }

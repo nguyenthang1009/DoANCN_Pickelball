@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api';
+import { useFeedback } from '../../lib/feedback';
 import PageHeader from '../../components/PageHeader';
 import { Alert, Badge, Button, Card, Input, Spinner } from '../../components/ui';
 
@@ -9,26 +10,52 @@ export default function Venues() {
   const [managers, setManagers] = useState([]);
   const [form, setForm] = useState({ name: '', address: '', openTime: '06:00', closeTime: '22:00' });
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const { notify, confirm } = useFeedback();
   const load = useCallback(() => {
     api('/admin/venues').then((d) => setVenues(d.venues)).catch((e) => setError(e.message));
     api('/admin/users?role=MANAGER').then((d) => setManagers(d.users)).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
-  const run = async (fn, ok) => { setError(''); setNotice(''); try { await fn(); setNotice(ok); load(); } catch (e) { setError(e.message); } };
+  const run = async (fn, ok) => { try { await fn(); notify.success(ok); load(); } catch (e) { notify.error(e.message); } };
 
   function editHours(v) {
-    const val = window.prompt(`Giờ mở–đóng cửa của ${v.name} (VD 06:00-22:00):`, `${v.openTime}-${v.closeTime}`);
-    if (!val) return;
-    const [openTime, closeTime] = val.split('-').map((s) => s.trim());
-    run(() => api(`/venues/${v.id}`, { method: 'PATCH', body: { openTime, closeTime } }), `Đã cập nhật giờ ${v.name}`);
+    confirm({
+      title: `Đổi giờ mở cửa ${v.name}`,
+      message: 'Giờ mới ảnh hưởng tới lịch đặt và bảng giá của mọi sân trong cơ sở.',
+      tone: 'warning',
+      confirmText: 'Lưu giờ mới',
+      input: {
+        label: 'Giờ mở – đóng cửa (VD 06:00-22:00)',
+        defaultValue: `${v.openTime}-${v.closeTime}`,
+        validate: (s) => (/^\d{2}:\d{2}\s*-\s*\d{2}:\d{2}$/.test(s) ? '' : 'Nhập theo dạng 06:00-22:00'),
+      },
+    }).then((val) => {
+      if (!val) return;
+      const [openTime, closeTime] = val.split('-').map((s) => s.trim());
+      run(() => api(`/venues/${v.id}`, { method: 'PATCH', body: { openTime, closeTime } }), `Đã cập nhật giờ ${v.name}`);
+    });
+  }
+
+  async function changeManager(v, managerId) {
+    const name = managers.find((m) => m.id === Number(managerId))?.fullName;
+    const ok = await confirm({
+      title: name ? `Gán quản lý cho ${v.name}?` : `Bỏ quản lý của ${v.name}?`,
+      details: name ? [['Quản lý mới', name]] : [],
+      tone: 'warning',
+      confirmText: 'Xác nhận',
+    });
+    if (ok) run(() => api(`/venues/${v.id}`, { method: 'PATCH', body: { managerId: managerId ? Number(managerId) : null } }), `Đã cập nhật quản lý ${v.name}`);
+  }
+
+  async function toggleVenue(v) {
+    if (v.isActive && !(await confirm({ title: `Tạm ngừng ${v.name}?`, message: 'Khách sẽ không thấy và không đặt được cơ sở này.', tone: 'danger', confirmText: 'Tạm ngừng', cancelText: 'Giữ lại' }))) return;
+    run(() => api(`/venues/${v.id}`, { method: 'PATCH', body: { isActive: !v.isActive } }), `${v.isActive ? 'Đã tạm ngừng' : 'Đã mở lại'} ${v.name}`);
   }
 
   return (
     <div>
       <PageHeader title="Cụm sân" subtitle="Thêm cơ sở, đổi giờ mở cửa, gán quản lý" />
       <Alert>{error}</Alert>
-      <Alert kind="success">{notice}</Alert>
       <Card className="mt-4 overflow-x-auto p-0">
         {!venues ? <Spinner /> : (
           <table className="w-full text-left text-sm">
@@ -40,7 +67,7 @@ export default function Venues() {
                   <td className="px-4 py-3">{v.address}</td>
                   <td className="px-4 py-3">{v.openTime}–{v.closeTime}</td>
                   <td className="px-4 py-3">
-                    <select aria-label={`Quản lý ${v.name}`} className="h-9 rounded-lg border border-slate-200 px-2" value={v.managerId ?? ''} onChange={(e) => run(() => api(`/venues/${v.id}`, { method: 'PATCH', body: { managerId: e.target.value ? Number(e.target.value) : null } }), `Đã gán quản lý cho ${v.name}`)}>
+                    <select aria-label={`Quản lý ${v.name}`} className="h-9 rounded-lg border border-slate-200 px-2" value={v.managerId ?? ''} onChange={(e) => changeManager(v, e.target.value)}>
                       <option value="">Chưa có</option>
                       {managers.map((m) => <option key={m.id} value={m.id}>{m.fullName}</option>)}
                     </select>
@@ -48,7 +75,7 @@ export default function Venues() {
                   <td className="px-4 py-3"><Badge tone={v.isActive ? 'green' : 'slate'}>{v.isActive ? 'Hoạt động' : 'Ngừng'}</Badge></td>
                   <td className="flex justify-end gap-2 px-4 py-3">
                     <Button kind="ghost" className="px-3 py-1 text-sm" onClick={() => editHours(v)}>Đổi giờ</Button>
-                    <Button kind="secondary" className="px-3 py-1 text-sm" onClick={() => run(() => api(`/venues/${v.id}`, { method: 'PATCH', body: { isActive: !v.isActive } }), `Đã cập nhật ${v.name}`)}>{v.isActive ? 'Tạm ngừng' : 'Mở lại'}</Button>
+                    <Button kind="secondary" className="px-3 py-1 text-sm" onClick={() => toggleVenue(v)}>{v.isActive ? 'Tạm ngừng' : 'Mở lại'}</Button>
                   </td>
                 </tr>
               ))}

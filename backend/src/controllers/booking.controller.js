@@ -1,10 +1,12 @@
 const bookingService = require('../services/booking.service');
 const serviceOrderService = require('../services/serviceOrder.service');
+const HttpError = require('../utils/httpError');
 
 // Màn POS: nhân sự đặt sân cho khách vãng lai, bán kèm dịch vụ trong cùng transaction
 async function create(req, res) {
   const body = req.body || {};
   const items = Array.isArray(body.services) && body.services.length && req.user.role !== 'CUSTOMER' ? body.services : null;
+  if (items && !req.user.permissions.includes('pos.sell')) throw new HttpError(403, 'FORBIDDEN', 'Bạn không có quyền bán dịch vụ');
   const extra = items
     ? (conn, b) => serviceOrderService.createOrder(conn, { venueId: b.venueId, bookingId: b.id, soldBy: req.user.id, paymentMethod: b.paymentMethod, items })
     : undefined;
@@ -28,6 +30,10 @@ async function refund(req, res) {
   res.json({ booking: await bookingService.confirmRefund(req.params.code, req.user, req.body || {}) });
 }
 
+async function move(req, res) {
+  res.json({ booking: await bookingService.moveBooking(req.params.code, req.body || {}, req.user) });
+}
+
 async function refunds(req, res) {
   res.json({ bookings: await bookingService.listRefunds(req.user, req.query.venueId) });
 }
@@ -37,4 +43,4 @@ async function listByVenue(req, res) {
   res.json({ venueId: req.venue.id, date, bookings: await bookingService.listByVenueDate(req.venue.id, date) });
 }
 
-module.exports = { create, mine, get, cancel, refund, refunds, listByVenue };
+module.exports = { create, mine, get, cancel, refund, move, refunds, listByVenue };

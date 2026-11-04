@@ -11,8 +11,8 @@ const configService = require('./config.service');
 const courtService = require('./court.service');
 const venueService = require('./venue.service');
 const priceRuleService = require('./priceRule.service');
-
-const STAFF_ROLES = ['STAFF', 'MANAGER', 'ADMIN'];
+const availabilityService = require('./availability.service');
+const invoiceService = require('./invoice.service');
 
 const addDays = (date, n) => { const d = new Date(`${date}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 // Thời điểm (ms) của một mốc giờ trong ngày theo giờ Việt Nam
@@ -103,15 +103,31 @@ function assertCanView(booking, user) {
   throw new HttpError(403, 'FORBIDDEN', 'Bạn không có quyền xem đơn này');
 }
 
+// Kèm quy tắc đọc từ system_configs để giao diện không phải viết cứng (BR11, BR12)
+async function withRules(bookings) {
+  const [cancelDeadlineHours, checkinEarlyMinutes] = await Promise.all([
+    configService.getNumber('ONLINE_CANCEL_DEADLINE_HOURS', 24),
+    configService.getNumber('CHECKIN_EARLY_WINDOW_MINUTES', 30),
+  ]);
+  const ids = bookings.map((b) => b.id);
+  const [invoices] = ids.length ? await pool.query("SELECT booking_id, invoice_no FROM invoices WHERE invoice_type = 'SALE' AND booking_id IN (?)", [ids]) : [[]];
+  const invoiceNoOf = new Map(invoices.map((i) => [i.booking_id, i.invoice_no]));
+  return bookings.map((b) => {
+    const hoursLeft = b.startTime ? (vnTimestamp(b.bookingDate, b.startTime) - Date.now()) / 3600000 : 0;
+    const paidInTime = b.paymentStatus === 'PAID' && b.checkinStatus === 'PENDING' && hoursLeft >= cancelDeadlineHours;
+    return { ...b, invoiceNo: invoiceNoOf.get(b.id) ?? null, cancelDeadlineHours, checkinEarlyMinutes, canCancelOnline: b.paymentStatus === 'PENDING_PAYMENT' || paidInTime };
+  });
+}
+
 async function getForUser(code, user) {
   const booking = await findByCode(code);
   assertCanView(booking, user);
-  return booking;
+  return (await withRules([booking]))[0];
 }
 
 async function listMine(user) {
   const [rows] = await pool.query(`${BOOKING_SELECT} WHERE b.customer_id = ? ORDER BY b.booking_date DESC, b.created_at DESC LIMIT 100`, [user.id]);
-  return hydrate(rows);
+  return withRules(await hydrate(rows));
 }
 
 async function listByVenueDate(venueId, date) {
@@ -177,7 +193,10 @@ async function createBooking(actor, body, { extra } = {}) {
   if (!Number.isInteger(courtId)) throw new HttpError(400, 'VALIDATION_ERROR', 'courtId là bắt buộc');
   const court = await courtService.getOrThrow(courtId);
   const venue = await venueService.getOrThrow(court.venueId);
-  const isPos = STAFF_ROLES.includes(actor.role);
+  const isPos = actor.role !== 'CUSTOMER';
+  if (!actor.permissions.includes(isPos ? 'pos.create' : 'booking.create')) {
+    throw new HttpError(403, 'FORBIDDEN', 'Bạn không có quyền thực hiện chức năng này');
+  }
   if (isPos && actor.role !== 'ADMIN' && actor.venueId !== court.venueId) {
     throw new HttpError(403, 'FORBIDDEN', 'Bạn chỉ được đặt sân tại cơ sở của mình');
   }
@@ -239,6 +258,7 @@ async function createBooking(actor, body, { extra } = {}) {
 
     if (paidNow) await conn.query('UPDATE bookings SET qr_signature = ? WHERE id = ?', [signBookingCode(bookingCode), bookingId]);
     if (extra) await extra(conn, { id: bookingId, bookingCode, venueId: venue.id, paymentMethod });
+    if (paidNow) await invoiceService.issueForBooking(conn, bookingId, actor.id);
     if (isPos) {
       await audit.log(conn, { actorId: actor.id, venueId: venue.id, actionType: 'POS_BOOKING', entityType: 'BOOKING', entityId: bookingId, newValues: { bookingCode, paymentMethod, courtId: court.id, date: quote.date, start: body.start, end: body.end } });
     }
@@ -256,7 +276,9 @@ async function cancelBooking(code, user, { reason } = {}) {
   const result = await withTransaction(async (conn) => {
     const booking = await findByCode(code, conn);
     assertCanView(booking, user);
-    if (user.role === 'STAFF') throw new HttpError(403, 'FORBIDDEN', 'Lễ tân không được hủy đơn, hãy báo Quản lý');
+    if (!user.permissions.includes(user.role === 'CUSTOMER' ? 'booking.cancel_own' : 'booking.cancel')) {
+      throw new HttpError(403, 'FORBIDDEN', 'Bạn không có quyền hủy đơn, hãy báo Quản lý');
+    }
     await conn.query('SELECT id FROM bookings WHERE id = ? FOR UPDATE', [booking.id]);
 
     let newStatus;
@@ -288,6 +310,64 @@ async function cancelBooking(code, user, { reason } = {}) {
   return findByCode(code);
 }
 
+// BR17: các đơn sắp tới trên sân sắp bảo trì, kèm những sân cùng cơ sở còn trống đủ mọi khung giờ của đơn
+async function courtImpact(court) {
+  const now = nowInVietnam();
+  const [rows] = await pool.query(
+    `${BOOKING_SELECT}
+      WHERE b.payment_status IN ('PAID', 'PENDING_PAYMENT') AND b.id IN (
+        SELECT s.booking_id FROM booking_slots s
+         WHERE s.court_id = ? AND s.slot_status IN ('HELD', 'CONFIRMED')
+           AND (s.booking_date > ? OR (s.booking_date = ? AND s.start_time >= ?)))
+      ORDER BY b.booking_date, b.id`,
+    [court.id, now.date, now.date, now.time],
+  );
+  const bookings = await hydrate(rows);
+  const others = (await courtService.listByVenue(court.venueId)).filter((c) => c.id !== court.id && c.status === 'ACTIVE');
+  const occupiedByDate = new Map();
+  for (const date of new Set(bookings.map((b) => b.bookingDate))) {
+    occupiedByDate.set(date, await availabilityService.occupiedSlots(court.venueId, date));
+  }
+  return bookings.map((b) => {
+    const occupied = occupiedByDate.get(b.bookingDate);
+    const free = (c) => b.slots.every((s) => !occupied.has(`${c.id}_${toMinutes(s.startTime)}`));
+    return {
+      bookingCode: b.bookingCode, customerName: b.customerName, customerPhone: b.customerPhone, bookingDate: b.bookingDate,
+      startTime: b.startTime, endTime: b.endTime, paymentStatus: b.paymentStatus, alternatives: others.filter(free).map((c) => ({ id: c.id, name: c.name })),
+    };
+  });
+}
+
+// BR17: đổi đơn sang sân khác cùng cơ sở, giữ nguyên giá đã chốt. Khóa UNIQUE active_slot_lock chặn đổi vào ô đã có người.
+async function moveBooking(code, { courtId }, actor) {
+  const targetId = Number(courtId);
+  if (!Number.isInteger(targetId)) throw new HttpError(400, 'VALIDATION_ERROR', 'courtId là bắt buộc');
+  const booking = await withTransaction(async (conn) => {
+    const current = await findByCode(code, conn);
+    assertCanView(current, actor);
+    await conn.query('SELECT id FROM bookings WHERE id = ? FOR UPDATE', [current.id]);
+    await expireHolds(conn, { venueId: current.venueId, date: current.bookingDate });
+    const fresh = await findByCode(code, conn);
+    if (!['PENDING_PAYMENT', 'PAID'].includes(fresh.paymentStatus) || fresh.checkinStatus !== 'PENDING') {
+      throw new HttpError(409, 'CANNOT_MOVE', 'Đơn ở trạng thái hiện tại không đổi sân được');
+    }
+    const target = await courtService.getOrThrow(targetId, conn);
+    if (target.venueId !== fresh.venueId) throw new HttpError(400, 'VALIDATION_ERROR', 'Chỉ đổi sang sân cùng cơ sở');
+    if (target.status !== 'ACTIVE') throw new HttpError(409, 'COURT_NOT_ACTIVE', `${target.name} không ở trạng thái hoạt động`);
+    if (target.id === fresh.courtId) throw new HttpError(409, 'SAME_COURT', 'Đơn đang ở sân này');
+    try {
+      await conn.query("UPDATE booking_slots SET court_id = ? WHERE booking_id = ? AND slot_status IN ('HELD', 'CONFIRMED')", [target.id, fresh.id]);
+    } catch (err) {
+      if (err.code === 'ER_DUP_ENTRY') throw new HttpError(409, 'SLOT_TAKEN', `${target.name} đã có người đặt trong khung giờ này`);
+      throw err;
+    }
+    await audit.log(conn, { actorId: actor.id, venueId: fresh.venueId, actionType: 'MOVE_BOOKING', entityType: 'BOOKING', entityId: fresh.id, oldValues: { courtId: fresh.courtId }, newValues: { courtId: target.id } });
+    return fresh;
+  }, { retries: 3 });
+  notify([{ bookingCode: code, venueId: booking.venueId, date: booking.bookingDate, status: booking.paymentStatus }], 'move');
+  return findByCode(code);
+}
+
 // UC20, US-M10: Manager xác nhận đã hoàn tiền thủ công cho khách
 async function confirmRefund(code, user, { note } = {}) {
   await withTransaction(async (conn) => {
@@ -296,6 +376,7 @@ async function confirmRefund(code, user, { note } = {}) {
     if (!['REFUND_PENDING', 'CONFLICT_REFUND_PENDING'].includes(booking.paymentStatus)) {
       throw new HttpError(409, 'NOT_REFUNDABLE', 'Đơn không ở trạng thái chờ hoàn tiền');
     }
+    await invoiceService.issueCredit(conn, booking, user.id);
     const memo = (typeof note === 'string' && note.trim()) || 'Đã hoàn tiền';
     await conn.query("UPDATE bookings SET payment_status = 'REFUNDED', refunded_at = NOW(), refunded_by = ?, refund_note = ? WHERE id = ?", [user.id, memo.slice(0, 255), booking.id]);
     await audit.log(conn, { actorId: user.id, venueId: booking.venueId, actionType: 'CONFIRM_REFUND', entityType: 'BOOKING', entityId: booking.id, oldValues: { paymentStatus: booking.paymentStatus }, newValues: { paymentStatus: 'REFUNDED' }, reason: memo });
@@ -321,6 +402,6 @@ async function runHousekeeping() {
 }
 
 module.exports = {
-  createBooking, cancelBooking, confirmRefund, getForUser, findByCode, listMine, listByVenueDate, listRefunds,
+  createBooking, cancelBooking, confirmRefund, moveBooking, courtImpact, getForUser, findByCode, listMine, listByVenueDate, listRefunds,
   runHousekeeping, expireHolds, signBookingCode, qrPayloadOf, assertCanView, vnTimestamp, toTime, toMinutes,
 };

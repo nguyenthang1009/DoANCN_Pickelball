@@ -5,11 +5,13 @@ Gồm backend Node.js + Express (MVC, MySQL, Socket.io) và frontend React (Vite
 
 ## Khởi tạo CSDL (MySQL 8.0 trên Laragon)
 
-Bật MySQL trong Laragon rồi chạy từ thư mục gốc của repo. Script xóa và tạo lại database `pickleball_booking`. Cần chạy lại sau khi kéo code tuần 8 (bảng `payment_transactions` có thêm cột).
+Bật MySQL trong Laragon rồi chạy từ thư mục gốc của repo. Script xóa và tạo lại database `pickleball_booking`. Cần chạy lại khi schema đổi (mới nhất: thêm bảng phân quyền và `refresh_tokens`).
 
 ```bash
 bash scripts/init-db.sh
 ```
+
+Bảng hóa đơn và sổ cái có trigger chặn sửa, xóa. Muốn làm sạch dữ liệu thử thì chạy lại script này, không xóa tay.
 
 Tài khoản mẫu (mật khẩu `12345678`): `admin@pickleball.vn`, `manager.q7@pickleball.vn`, `staff.q7@pickleball.vn`, `customer1@gmail.com`.
 
@@ -23,6 +25,8 @@ npm run dev
 ```
 
 API chạy tại `http://localhost:3000/api`, Socket.io cùng cổng. Job nền chạy mỗi 30 giây để hết hạn giữ chỗ (10 phút) và đánh dấu khách không đến.
+
+Frontend chạy ở địa chỉ khác `http://localhost:5173` thì thêm địa chỉ đó vào `CORS_ORIGINS`, nếu không trình duyệt sẽ không gọi được API kèm cookie.
 
 Thanh toán PayOS: điền đủ `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY` (và `PAYOS_RETURN_URL` là địa chỉ frontend) vào `.env` để gọi PayOS thật; webhook là `POST /api/payments/payos/webhook`. Thiếu khóa thì hệ thống chạy chế độ **mock**: trang thanh toán có nút "Giả lập chuyển khoản thành công", gửi webhook ký đúng chuẩn PayOS qua cùng bộ xử lý.
 
@@ -38,10 +42,14 @@ Mở `http://localhost:5173`. Vite chuyển `/api` và `/socket.io` sang backend
 
 | Vai trò | Trang chính |
 | --- | --- |
-| Khách hàng | Ma trận chọn sân `/`, thanh toán VietQR, vé QR, lịch đặt của tôi |
-| Lễ tân | POS đặt tại quầy, check-in QR, bán dịch vụ, đơn trong ngày, doanh thu ca |
-| Quản lý | Như lễ tân + tổng quan doanh thu, sân & bảng giá, dịch vụ, hoàn tiền (cơ sở của mình) |
-| Admin | Như quản lý cho mọi cơ sở + cụm sân, tài khoản |
+| Khách hàng | Trang chủ `/`, ma trận chọn sân `/dat-san`, thanh toán VietQR, vé QR, lịch đặt, hóa đơn của tôi |
+| Lễ tân | POS đặt tại quầy, check-in QR, bán dịch vụ, đơn trong ngày, doanh thu ca, hóa đơn cơ sở, phiếu lương của mình |
+| Quản lý | Như lễ tân + tổng quan doanh thu, sân & bảng giá, dịch vụ, hoàn tiền, tài chính, lập bảng lương (cơ sở của mình) |
+| Admin | Như quản lý cho mọi cơ sở + cụm sân, tài khoản, phân quyền, duyệt lương, đối soát, tham số pháp lý, ảnh và nội dung |
+
+Menu và trang được ẩn hiện theo quyền của tài khoản, nên vai trò tự tạo (VD: Thu ngân) chỉ thấy đúng chức năng được cấp.
+
+Mọi thao tác hiện thông báo kết quả. Thao tác nhạy cảm (hủy đơn, thu tiền, hoàn tiền, khóa tài khoản, đổi vai trò, đổi quyền, đổi giá, xóa sân, bảo trì) phải qua hộp xác nhận: dùng `useFeedback()` trong `frontend/src/lib/feedback.jsx`, không dùng `window.confirm`. Hiệu ứng động tự tắt khi người dùng bật giảm chuyển động trong hệ điều hành.
 
 ## API
 
@@ -51,8 +59,12 @@ Mở `http://localhost:5173`. Vite chuyển `/api` và `/socket.io` sang backend
 | POST | `/auth/login` | Công khai, đăng nhập bằng email hoặc SĐT |
 | GET | `/auth/me` | Đã đăng nhập |
 | POST | `/auth/change-password` | Đã đăng nhập |
+| POST | `/auth/refresh`, `/auth/logout` | Theo cookie phiên |
 | GET, POST | `/admin/users` | ADMIN |
 | PATCH | `/admin/users/:id` | ADMIN (khóa / mở khóa) |
+| PATCH | `/admin/users/:id/role` | ADMIN (đổi vai trò) |
+| GET, POST | `/admin/roles` | ADMIN (ma trận quyền, tạo vai trò) |
+| PUT, DELETE | `/admin/roles/:id` | ADMIN |
 | GET | `/admin/venues` | ADMIN (cả cơ sở đã ngừng) |
 | GET | `/venues/:venueId/staff` | ADMIN, MANAGER của đúng cơ sở |
 | GET | `/venues`, `/venues/:venueId`, `/venues/:venueId/courts` | Công khai |
@@ -62,6 +74,7 @@ Mở `http://localhost:5173`. Vite chuyển `/api` và `/socket.io` sang backend
 | GET | `/courts/:courtId`, `/courts/:courtId/price-rules` | Công khai |
 | GET | `/courts/:courtId/quote?date=YYYY-MM-DD&start=HH:MM&end=HH:MM` | Công khai (báo giá) |
 | PATCH, DELETE | `/courts/:courtId` | ADMIN, MANAGER của đúng cơ sở |
+| GET | `/courts/:courtId/impact` | ADMIN, MANAGER của đúng cơ sở (đơn bị ảnh hưởng, sân thay thế) |
 | PATCH | `/courts/:courtId/status` | ADMIN, MANAGER của đúng cơ sở (bảo trì) |
 | PUT | `/courts/:courtId/price-rules` | ADMIN, MANAGER của đúng cơ sở |
 | GET | `/venues/:venueId/services` | ADMIN, MANAGER, STAFF của đúng cơ sở |
@@ -74,6 +87,7 @@ Mở `http://localhost:5173`. Vite chuyển `/api` và `/socket.io` sang backend
 | POST | `/bookings/:code/payment-link` | Chủ đơn, nhân sự cơ sở |
 | POST | `/bookings/:code/check-in` | STAFF, MANAGER, ADMIN của đúng cơ sở |
 | GET | `/bookings/refunds`, POST `/bookings/:code/refund` | MANAGER, ADMIN |
+| POST | `/bookings/:code/move` | MANAGER, ADMIN của đúng cơ sở (đổi sân, giữ nguyên giá) |
 | GET | `/venues/:venueId/bookings?date=` | STAFF, MANAGER, ADMIN của đúng cơ sở |
 | POST | `/venues/:venueId/service-orders` | STAFF, MANAGER, ADMIN của đúng cơ sở (bán lẻ) |
 | POST | `/checkin/lookup` | STAFF, MANAGER, ADMIN (quét QR hoặc nhập mã đơn) |
@@ -82,7 +96,9 @@ Mở `http://localhost:5173`. Vite chuyển `/api` và `/socket.io` sang backend
 | GET | `/reports/shift?date=` | STAFF (ca của mình), MANAGER (cơ sở), ADMIN (toàn hệ thống) |
 | GET | `/reports/revenue?from=&to=&venueId=` | MANAGER (cơ sở mình), ADMIN |
 
-Tài khoản nội bộ do Admin tạo nhận mật khẩu tạm và phải đổi mật khẩu trước khi dùng các API có `authorize()`.
+Cột Quyền ghi theo cấu hình mặc định. Mỗi API thực tế kiểm tra một mã chức năng (xem mục Phân quyền), nên đổi được trên màn Phân quyền.
+
+Tài khoản nội bộ do Admin tạo nhận mật khẩu tạm và phải đổi mật khẩu trước khi dùng các API có `can()`.
 
 Quy tắc nghiệp vụ chính:
 
@@ -90,8 +106,46 @@ Quy tắc nghiệp vụ chính:
 - Mỗi ô 30 phút là một dòng `booking_slots`; khóa UNIQUE `active_slot_lock` chặn hai đơn cùng giữ một ô, người đến sau nhận `409 SLOT_TAKEN`.
 - Giữ chỗ online 10 phút chờ VietQR; tiền về trễ khi ô đã thuộc người khác thì đơn chuyển `CONFLICT_REFUND_PENDING`.
 - Mã QR trên vé là mã đơn + chữ ký HMAC; chỉ nhận sân trong khoảng 30 phút trước giờ chơi tới giờ kết thúc.
-- Chuyển sân sang `MAINTENANCE`/`INACTIVE` (bắt buộc có lý do) hủy các đơn sắp tới trên sân. Sân đã có lịch đặt không xóa được.
+- Chuyển sân sang `MAINTENANCE`/`INACTIVE` (bắt buộc có lý do) hủy các đơn sắp tới còn lại trên sân. Trước khi khóa, Quản lý xem danh sách đơn bị ảnh hưởng và đổi khách sang sân còn trống cùng khung giờ. Sân đã có lịch đặt không xóa được.
 - Mọi thay đổi cơ sở, sân, giá, dịch vụ, hủy đơn, hoàn tiền, check-in được ghi vào `audit_logs`.
+
+## Tài chính
+
+Mô hình ERP thu nhỏ, tiền lưu VND số nguyên, không dùng số thực:
+
+- **Hóa đơn:** tự phát hành khi tiền về (tiền mặt, VietQR, bán lẻ) trong cùng transaction với nghiệp vụ, số liên tục theo năm. Giá niêm yết đã gồm thuế, thuế suất chốt lúc phát hành. Hoàn tiền phát hành hóa đơn điều chỉnh giảm.
+- **Sổ cái kế toán kép:** mọi khoản thu, hoàn tiền, lương đều ghi bút toán nợ có; bút toán lệch thì cả nghiệp vụ dừng lại. Báo cáo tài chính đọc từ sổ cái. Trigger MySQL chặn sửa, xóa hóa đơn và sổ cái.
+- **Đối soát:** Admin chạy 12 phép so chéo giữa nghiệp vụ, hóa đơn, sổ cái, PayOS và bảng lương ở mục Tài chính.
+- **Tiền lương:** hợp đồng theo ngày hiệu lực, Quản lý lập bảng và chấm công, Admin duyệt rồi xác nhận chi trả; người lập không tự duyệt được. Tính BHXH, BHYT, BHTN, giảm trừ gia cảnh, thuế TNCN 5 bậc, làm thêm giờ.
+- **Tham số pháp lý:** lưu theo ngày hiệu lực ở mục Tham số pháp lý. Luật đổi thì thêm phiên bản mới, không sửa code.
+
+Hóa đơn hiện là chứng từ nội bộ, chưa phải hóa đơn điện tử có mã của cơ quan thuế; muốn dùng thật cần kết nối nhà cung cấp hóa đơn điện tử. Các tham số thuế là giá trị tham khảo, cần kế toán xác nhận.
+
+Admin thay ảnh hệ thống, chọn điểm lấy nét khi cắt ảnh theo khổ màn hình và sửa thông tin đồ án ở mục Ảnh & nội dung. Ảnh tải lên nằm ở `backend/uploads/` (không commit).
+
+## Phân quyền
+
+`users.role` là cấp phạm vi dữ liệu (toàn chuỗi, theo cơ sở, của mình). Quyền dùng chức năng nằm ở `permissions` và `role_permissions`, route kiểm tra bằng `can('booking.refund')`. Đổi quyền có hiệu lực ngay vì mỗi request đọc lại từ CSDL.
+
+Admin tạo vai trò mới và tích quyền trên màn Phân quyền. Các chốt chặn nằm ở backend:
+
+- Vai trò tự tạo chỉ có phạm vi theo cơ sở, không có cấp toàn chuỗi.
+- Quyền quản trị (`admin_only`) không gán được cho vai trò khác ngoài Admin.
+- Chỉ cấp hoặc gỡ được quyền mình đang có.
+- Không tự sửa vai trò của mình, không tự đổi vai trò của mình.
+- Vai trò Admin không sửa được; vai trò hệ thống và vai trò đang dùng không xóa được.
+- Hệ thống luôn còn ít nhất một Admin hoạt động.
+- Mọi thay đổi ghi `audit_logs`.
+
+## Bảo mật
+
+- Phiên đăng nhập nằm trong cookie `httpOnly`, `SameSite=Lax`: token truy cập 15 phút, refresh token 7 ngày, xoay vòng mỗi lần dùng. CSDL chỉ lưu giá trị băm SHA-256. Refresh token cũ bị dùng lại sẽ thu hồi cả chuỗi phiên.
+- Đổi mật khẩu đăng xuất mọi thiết bị.
+- `helmet` đặt header bảo mật. CORS chỉ mở cho `CORS_ORIGINS`. Request ghi dữ liệu kèm cookie từ nguồn lạ bị chặn.
+- Giới hạn tần suất: 600 request/phút theo IP; 10 lần đăng nhập sai/15 phút theo IP + tài khoản; 60 lần đăng ký, làm mới phiên, đổi mật khẩu/15 phút. Bộ đếm nằm trong RAM, chạy nhiều tiến trình thì cần Redis.
+- Webhook PayOS không dùng cookie, xác thực bằng chữ ký HMAC.
+
+Khi triển khai thật: chạy sau HTTPS, đặt `NODE_ENV=production` (bật cookie `Secure`, ẩn token khỏi JSON), `TRUST_PROXY=1` nếu đứng sau Nginx, đổi toàn bộ khóa bí mật. Ngoài production, API vẫn trả `token` trong JSON và nhận header `Authorization: Bearer` để Postman và script kiểm thử chạy được.
 
 ## Kiểm thử
 
@@ -101,12 +155,14 @@ Trong `backend/postman/` có ba collection: `pickleball-auth-rbac` (tuần 4), `
 npx newman run backend/postman/pickleball-booking-pos.postman_collection.json
 ```
 
-Kịch bản tranh chấp (nhiều khách cùng đặt một ô) và kịch bản thanh toán – check-in:
+Kịch bản tranh chấp (nhiều khách cùng đặt một ô), thanh toán – check-in, và bảo mật – phân quyền – đổi sân:
 
 ```bash
 cd backend
 node scripts/race-test.js http://localhost:3000/api 20
 DB_NAME=pickleball_booking node scripts/payment-test.js http://localhost:3000/api
+DB_NAME=pickleball_booking node scripts/security-test.js http://localhost:3000/api
+DB_NAME=pickleball_booking node scripts/finance-test.js http://localhost:3000/api
 ```
 
 Các collection và script tạo thêm dữ liệu thử mỗi lần chạy (`payment-test.js` còn sửa trực tiếp hạn giữ chỗ), nên chạy trên CSDL vừa khởi tạo lại.

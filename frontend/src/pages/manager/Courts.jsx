@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api';
+import { useAuth } from '../../lib/auth';
+import { useFeedback } from '../../lib/feedback';
 import { vnd } from '../../lib/format';
 import { useVenueScope } from '../../lib/useVenueScope';
 import PageHeader from '../../components/PageHeader';
+import MaintenanceModal from '../../components/MaintenanceModal';
 import { Alert, Badge, Button, Card, Input, Select, Spinner } from '../../components/ui';
 
 const STATUS = { ACTIVE: ['green', 'Hoạt động'], MAINTENANCE: ['amber', 'Bảo trì'], INACTIVE: ['slate', 'Ngừng sử dụng'] };
@@ -10,11 +13,13 @@ const STATUS = { ACTIVE: ['green', 'Hoạt động'], MAINTENANCE: ['amber', 'B�
 // US-M01, US-M02, US-M04: sân con, trạng thái bảo trì và bảng giá theo khung giờ
 export default function Courts() {
   const scope = useVenueScope();
+  const { can } = useAuth();
+  const { notify, confirm } = useFeedback();
   const [courts, setCourts] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [closing, setClosing] = useState(null);
   const [form, setForm] = useState({ name: '', courtType: 'INDOOR', copyPriceFrom: '' });
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
 
   const load = useCallback(() => {
     if (scope.venueId) api(`/venues/${scope.venueId}/courts`).then((d) => setCourts(d.courts)).catch((e) => setError(e.message));
@@ -23,26 +28,31 @@ export default function Courts() {
 
   // ok: chuỗi thông báo, hoặc hàm dựng thông báo từ kết quả API
   const run = async (fn, ok) => {
-    setError(''); setNotice('');
-    try { const r = await fn(); if (ok) setNotice(typeof ok === 'function' ? ok(r) : ok); load(); } catch (e) { setError(e.message); }
+    try { await fn(); notify.success(ok); load(); } catch (e) { notify.error(e.message); }
   };
 
-  function changeStatus(c, status) {
-    const reason = status === 'ACTIVE' ? undefined : window.prompt(`Lý do chuyển ${c.name} sang ${STATUS[status][1].toLowerCase()} (đơn sắp tới trên sân sẽ bị hủy/hoàn tiền):`);
-    if (status !== 'ACTIVE' && !reason) return;
-    run(() => api(`/courts/${c.id}/status`, { method: 'PATCH', body: { status, reason } }), (r) => {
-      const label = `Đã chuyển ${c.name} sang ${STATUS[status][1].toLowerCase()}`;
-      return r.affectedBookings.length
-        ? `${label}. ${r.affectedBookings.length} đơn bị ảnh hưởng: ${r.affectedBookings.map((b) => `${b.bookingCode} → ${b.newStatus === 'REFUND_PENDING' ? 'chờ hoàn tiền' : 'đã hủy'}`).join(', ')}`
-        : label;
-    });
+  function afterMaintenance(c, r, moved) {
+    setClosing(null);
+    const cancelled = r.affectedBookings.map((b) => `${b.bookingCode} → ${b.newStatus === 'REFUND_PENDING' ? 'chờ hoàn tiền' : 'đã hủy'}`);
+    notify.success([`Đã chuyển ${c.name} sang bảo trì`, moved.length && `Đổi sân: ${moved.join(', ')}`, cancelled.length && `Bị hủy: ${cancelled.join(', ')}`].filter(Boolean).join('. '));
+    load();
+  }
+
+  async function reopen(c) {
+    if (await confirm({ title: `Mở lại ${c.name}?`, message: 'Khách sẽ đặt được sân này ngay.', confirmText: 'Mở lại sân' })) {
+      run(() => api(`/courts/${c.id}/status`, { method: 'PATCH', body: { status: 'ACTIVE' } }), `Đã mở lại ${c.name}`);
+    }
+  }
+
+  async function remove(c) {
+    const ok = await confirm({ title: `Xóa ${c.name}?`, message: 'Sân và bảng giá sẽ bị xóa vĩnh viễn. Sân đã có lịch đặt thì không xóa được, hãy chuyển sang ngừng sử dụng.', tone: 'danger', confirmText: 'Xóa sân', cancelText: 'Giữ lại' });
+    if (ok) run(() => api(`/courts/${c.id}`, { method: 'DELETE' }), `Đã xóa ${c.name}`);
   }
 
   return (
     <div>
       <PageHeader title="Sân & bảng giá" subtitle={scope.venue ? `${scope.venue.name} · mở cửa ${scope.venue.openTime}–${scope.venue.closeTime}` : ''} scope={scope} />
       <Alert>{error}</Alert>
-      <Alert kind="success">{notice}</Alert>
       <div className="mt-4 grid gap-6 xl:grid-cols-[1fr_420px]">
         <Card className="overflow-x-auto p-0">
           {!courts ? <Spinner /> : (
@@ -55,18 +65,18 @@ export default function Courts() {
                     <td className="px-4 py-3">{c.courtType === 'INDOOR' ? 'Trong nhà' : 'Ngoài trời'}</td>
                     <td className="px-4 py-3"><Badge tone={STATUS[c.status][0]}>{STATUS[c.status][1]}</Badge></td>
                     <td className="flex flex-wrap justify-end gap-2 px-4 py-3">
-                      <Button kind="ghost" className="px-3 py-1 text-sm" onClick={() => setEditing(c)}>Sửa giá</Button>
-                      {c.status === 'ACTIVE'
-                        ? <Button kind="secondary" className="px-3 py-1 text-sm" onClick={() => changeStatus(c, 'MAINTENANCE')}>Đặt bảo trì</Button>
-                        : <Button kind="secondary" className="px-3 py-1 text-sm" onClick={() => changeStatus(c, 'ACTIVE')}>Mở lại sân</Button>}
-                      <Button kind="ghost" className="px-3 py-1 text-sm text-red-700" onClick={() => window.confirm(`Xóa ${c.name}?`) && run(() => api(`/courts/${c.id}`, { method: 'DELETE' }), `Đã xóa ${c.name}`)}>Xóa</Button>
+                      {can('price.manage') && <Button kind="ghost" className="px-3 py-1 text-sm" onClick={() => setEditing(c)}>Sửa giá</Button>}
+                      {can('court.manage') && (c.status === 'ACTIVE'
+                        ? <Button kind="secondary" className="px-3 py-1 text-sm" onClick={() => setClosing(c)}>Đặt bảo trì</Button>
+                        : <Button kind="secondary" className="px-3 py-1 text-sm" onClick={() => reopen(c)}>Mở lại sân</Button>)}
+                      {can('court.manage') && <Button kind="ghost" className="px-3 py-1 text-sm text-red-700" onClick={() => remove(c)}>Xóa</Button>}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
-          <form className="flex flex-wrap items-end gap-2 border-t border-slate-200 p-4" onSubmit={(e) => {
+          {can('court.manage') && <form className="flex flex-wrap items-end gap-2 border-t border-slate-200 p-4" onSubmit={(e) => {
             e.preventDefault();
             run(() => api(`/venues/${scope.venueId}/courts`, { method: 'POST', body: { name: form.name, courtType: form.courtType, copyPriceFrom: form.copyPriceFrom ? Number(form.copyPriceFrom) : undefined } }), `Đã thêm ${form.name}`)
               .then(() => setForm({ name: '', courtType: 'INDOOR', copyPriceFrom: '' }));
@@ -80,10 +90,11 @@ export default function Courts() {
               {courts?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </Select>
             <Button type="submit">Thêm sân</Button>
-          </form>
+          </form>}
         </Card>
-        {editing && <PriceEditor key={editing.id} court={editing} venue={scope.venue} onSaved={(msg) => { setNotice(msg); setEditing(null); }} onClose={() => setEditing(null)} />}
+        {editing && <PriceEditor key={editing.id} court={editing} venue={scope.venue} onSaved={(msg) => { notify.success(msg); setEditing(null); }} onClose={() => setEditing(null)} />}
       </div>
+      {closing && <MaintenanceModal court={closing} onClose={() => { setClosing(null); load(); }} onDone={(r, moved) => afterMaintenance(closing, r, moved)} />}
     </div>
   );
 }
@@ -97,6 +108,13 @@ function PriceEditor({ court, venue, onSaved, onClose }) {
   const update = (i, k, v) => setRules(rules.map((r, j) => (j === i ? { ...r, [k]: k === 'pricePerHour' ? Number(v) : v } : r)));
 
   async function save() {
+    const ok = await confirm({
+      title: `Lưu bảng giá ${court.name}?`,
+      message: 'Giá mới áp dụng từ đơn đặt sau. Các đơn đã giữ chỗ hoặc đã thanh toán giữ nguyên giá cũ.',
+      tone: 'warning',
+      confirmText: 'Lưu bảng giá',
+    });
+    if (!ok) return;
     setBusy(true); setError('');
     try { await api(`/courts/${court.id}/price-rules`, { method: 'PUT', body: { rules } }); onSaved(`Đã lưu bảng giá ${court.name}`); } catch (e) { setError(e.message); } finally { setBusy(false); }
   }

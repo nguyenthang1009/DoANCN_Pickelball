@@ -11,6 +11,7 @@ export default defineConfig({
     port: Number(process.env.VITE_PORT) || 5173,
     proxy: {
       '/api': target,
+      '/uploads': target,
       '/socket.io': { target, ws: true },
     },
   },

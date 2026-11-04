@@ -23,7 +23,10 @@ export function useBookingWatch(code, onChange) {
     if (!code) return undefined;
     const s = getSocket();
     const event = `booking:${code}`;
+    const watch = () => s.emit('watch-booking', code);
+    watch();
+    s.on('connect', watch);
     s.on(event, onChange);
-    return () => s.off(event, onChange);
+    return () => { s.emit('unwatch-booking', code); s.off('connect', watch); s.off(event, onChange); };
   }, [code, onChange]);
 }

@@ -82,9 +82,59 @@ Giao diện chặn cùng ma trận này: mỗi vai trò chỉ thấy mục menu 
 | Ma trận POS tràn ngang, chỉ thấy tới 14:00 | Ảnh chụp 1440 × 900 | Nhãn giờ không chiếm độ rộng cột; bản thu nhỏ co vừa khung |
 | Thông báo bảo trì không liệt kê đơn bị ảnh hưởng | Trang Sân & bảng giá | Dựng thông báo từ kết quả API |
 
-## 5. Chưa kiểm thử được
+## 5. Đợt 1: phân quyền, bảo mật, giao diện theo đặc tả
+
+Ngày chạy: 05/11/2026 · trên CSDL thử tạo mới từ `schema.sql` + `seed.sql`.
+
+| Bộ kiểm thử | Phạm vi | Số ca | Kết quả |
+| --- | --- | --- | --- |
+| Ba collection Postman ở mục 1 | Hồi quy sau khi đổi sang quyền theo mã chức năng và cookie | 145 request · 180 assertion | Đạt hết, bằng mốc trước khi sửa |
+| `scripts/race-test.js` | Tranh chấp giữ chỗ | 2 vòng | Đạt |
+| `scripts/payment-test.js` | Webhook, check-in | 16 kiểm tra | Đạt |
+| `scripts/security-test.js` | Phiên cookie, CSRF, CORS, giới hạn đăng nhập, chốt chặn phân quyền, đổi sân, quy tắc hủy | 62 kiểm tra | Đạt |
+| Giao diện trên trình duyệt thật | Khách, Lễ tân, Quản lý, Admin, vai trò Thu ngân tự tạo; trang chủ ở 375 px và 1440 px | Theo luồng | Đạt |
+
+Lỗi phát hiện và đã sửa trong đợt này:
+
+| Lỗi | Phát hiện bởi | Cách sửa |
+| --- | --- | --- |
+| Refresh token vừa bị thu hồi (đăng xuất, lộ token) vẫn đổi được trong 10 giây chờ dành cho hai tab | `security-test.js` | Tách `rotated_at` khỏi `revoked_at`; token đã thu hồi bị từ chối ngay |
+| Trang Đơn trong ngày gọi `can` chưa khai báo, build vẫn qua nhưng lỗi khi chạy | Rà soát trước khi chạy giao diện | Lấy `can` từ `useAuth` |
+| Trang chủ hiện "0 ô trống" sau giờ đóng cửa | Chạy thật lúc 22 giờ | Hiện "Đã hết" |
+| Sự kiện realtime của đơn phát cho mọi kết nối, lộ mã đơn | Rà soát khi thêm cookie | Chỉ gửi tới phòng của đúng đơn |
+
+Hai request "Không có token" trong Postman được tắt cookie, vì Newman tự giữ cookie từ lần đăng nhập trước.
+
+Sau đó bổ sung thông báo, hộp xác nhận, ảnh và hiệu ứng (chỉ đổi frontend, không đổi API). Đã thử trên trình duyệt thật, CSDL thử:
+
+| Vai trò | Thao tác đã thử |
+| --- | --- |
+| Khách | Sai mật khẩu, đăng nhập, hủy đơn (Giữ lại, Esc, đồng ý), đăng xuất |
+| Lễ tân | Thu tiền mặt POS (Xem lại thì không tạo đơn, đồng ý thì tạo), bán dịch vụ |
+| Quản lý | Đổi giá dịch vụ (chặn giá sai), ngừng bán, xác nhận hoàn tiền, xóa sân |
+| Admin | Khóa, mở khóa, đổi vai trò, lưu quyền, đổi giờ cơ sở (chặn định dạng sai), tạm ngừng cơ sở, bảo trì nhiều đơn |
+
+Realtime vẫn đạt: ô lịch đổi sau 90 ms khi có người giữ chỗ từ máy khác. Trang chủ, đặt sân, đăng nhập, đăng ký không tràn ngang ở 375 px.
+
+## 6. Hóa đơn, thuế, sổ cái, tiền lương
+
+Ngày chạy: 05/11/2026. `scripts/finance-test.js` gồm các ca tính tay độc lập với code: lương 20, 40, 80 triệu đồng, chạm trần bảo hiểm, làm thêm giờ, dưới 14 ngày công, biểu thuế 5 bậc, tách VAT trên 4.000 mức giá; luồng hóa đơn, hoàn tiền, tiền về trễ, trigger chặn sửa, quy trình lương, đối soát 12 điểm, lọc theo cơ sở.
+
+Lỗi phát hiện và đã sửa:
+
+| Lỗi | Phát hiện bởi | Cách sửa |
+| --- | --- | --- |
+| Phép trừ trên cột `BIGINT UNSIGNED` tràn khi có hóa đơn điều chỉnh giảm | `finance-test.js` | Đổi `debit`, `credit` sang số có dấu, kèm ràng buộc không âm |
+| Lọc tài chính theo một cơ sở hiện doanh thu 0đ do sai thứ tự tham số SQL | Xem giao diện thật, test chưa phủ | Sửa thứ tự, thêm ca: cộng từng cơ sở phải bằng toàn chuỗi |
+| Đơn tiền về trễ đã hoàn bị báo thiếu hóa đơn | `finance-test.js` | Loại trừ đúng trường hợp không phát sinh doanh thu |
+| Admin không đổi được vai trò sang Lễ tân vì thiếu quyền `payroll.view_own` | `security-test.js` | Cấp quyền đó cho Admin |
+
+## 7. Chưa kiểm thử được
 
 - **PayOS thật**: chưa có `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`. Cách ký chữ ký làm theo SDK chính thức của payOS; cần chạy thử với tài khoản PayOS sandbox trước khi demo.
 - **Quét QR bằng camera**: trình duyệt kiểm thử không có camera; đã kiểm luồng nhập mã tay và API quét QR (`/checkin/lookup` với chuỗi QR).
-- **Giao diện điện thoại**: trang khách co được và ma trận cuộn ngang, nhưng chưa rà riêng từng màn ở khổ 390 px.
+- **Giao diện điện thoại**: trang chủ đã kiểm ở 375 px; các trang khách còn lại co được và ma trận cuộn ngang, nhưng chưa rà riêng từng màn. Modal bảo trì và màn Phân quyền chưa kiểm ở khổ nhỏ.
 - **Email gửi vé**: chưa làm, vé hiển thị trên trang "Lịch đặt của tôi".
+- **Hóa đơn điện tử thật**: chưa kết nối nhà cung cấp, chưa có mã của cơ quan thuế.
+- **Số liệu lớn**: đối soát chạy trên dữ liệu thử nhỏ, chưa thử với hàng chục nghìn hóa đơn.
+- **HTTPS và cookie `Secure`**: máy phát triển chạy HTTP nên chưa chạy thử với `NODE_ENV=production`.

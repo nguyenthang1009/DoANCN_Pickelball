@@ -5,17 +5,11 @@ import { api } from '../../lib/api';
 import { addDays, dayMonth, todayVN, vnd, weekdayShort } from '../../lib/format';
 import { useVenueScope } from '../../lib/useVenueScope';
 import PageHeader from '../../components/PageHeader';
+import StatCard from '../../components/StatCard';
 import { Alert, Card, Input, Spinner } from '../../components/ui';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, ChartLegend);
 
-const Stat = ({ label, value, note }) => (
-  <Card className="p-4">
-    <p className="text-sm text-slate-600">{label}</p>
-    <p className="text-2xl font-semibold">{value}</p>
-    {note && <p className="text-xs text-slate-600">{note}</p>}
-  </Card>
-);
 const pct = (r) => `${Math.round(r * 100)}%`;
 
 // Dashboard Manager (cơ sở mình) / Admin (toàn chuỗi hoặc từng cơ sở): doanh thu theo ngày, lấp đầy, giờ cao điểm
@@ -55,10 +49,10 @@ export default function Dashboard() {
       {!data ? <Spinner /> : (
         <div className="flex flex-col gap-4">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label="Doanh thu" value={vnd(data.totals.revenue)} note={`Sân ${vnd(data.totals.court)} · dịch vụ ${vnd(data.totals.service)}`} />
-            <Stat label="Số đơn đã thanh toán" value={data.totals.bookings} />
-            <Stat label="Tỷ lệ lấp đầy" value={pct(data.totals.occupancyRate)} note="Trên các sân đang hoạt động" />
-            <Stat label="Chờ hoàn tiền" value={`${data.totals.refundPending} đơn`} note={vnd(data.totals.refundPendingAmount)} />
+            <StatCard label="Doanh thu đơn đã thu" value={data.totals.revenue} format={vnd} note={`Sân ${vnd(data.totals.court)} · dịch vụ ${vnd(data.totals.service)}`} icon="chart" tone="teal" />
+            <StatCard label="Số đơn đã thanh toán" value={data.totals.bookings} icon="ticket" tone="slate" delay={80} />
+            <StatCard label="Tỷ lệ lấp đầy" value={Math.round(data.totals.occupancyRate * 100)} format={(n) => `${n}%`} note="Trên các sân đang hoạt động" icon="court" tone="lime" delay={160} />
+            <StatCard label="Chờ hoàn tiền" value={data.totals.refundPending} format={(n) => `${n} đơn`} note={vnd(data.totals.refundPendingAmount)} icon="refund" delay={240} />
           </div>
           <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
             <Card>

@@ -61,7 +61,7 @@ const addDays = (d, n) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86400e3).t
 
 // Dashboard Manager/Admin: doanh thu theo ngày, tỷ lệ lấp đầy theo sân, giờ cao điểm, đơn chờ hoàn tiền
 async function revenue(user, { from, to, venueId } = {}) {
-  if (user.role === 'STAFF' || user.role === 'CUSTOMER') throw new HttpError(403, 'FORBIDDEN', 'Bạn không có quyền xem báo cáo này');
+  if (!user.permissions.includes('report.revenue')) throw new HttpError(403, 'FORBIDDEN', 'Bạn không có quyền xem báo cáo này');
   const end = to || nowInVietnam().date;
   const start = from || addDays(end, -6);
   assertDate(start, 'from');

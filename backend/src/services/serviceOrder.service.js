@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const HttpError = require('../utils/httpError');
 const withTransaction = require('../utils/transaction');
 const audit = require('./audit.service');
+const invoiceService = require('./invoice.service');
 
 // G6, US-S06: hóa đơn dịch vụ tại quầy. Gắn với đơn sân (booking_id) hoặc bán lẻ (booking_id NULL).
 // Ghi trong transaction conn của người gọi; giá chốt theo đơn giá hiện tại (unit_price_snapshot).
@@ -43,8 +44,9 @@ async function createRetail(user, venueId, { items, paymentMethod }) {
   if (user.role !== 'ADMIN' && user.venueId !== venueId) throw new HttpError(403, 'FORBIDDEN', 'Bạn chỉ bán hàng tại cơ sở của mình');
   return withTransaction(async (conn) => {
     const order = await createOrder(conn, { venueId, soldBy: user.id, paymentMethod, items });
+    const invoice = await invoiceService.issueForServiceOrder(conn, order, user.id);
     await audit.log(conn, { actorId: user.id, venueId, actionType: 'SELL_SERVICE', entityType: 'SERVICE_ORDER', entityId: order.id, newValues: order });
-    return order;
+    return { ...order, invoiceNo: invoice.invoiceNo };
   });
 }
 
