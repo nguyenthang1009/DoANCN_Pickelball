@@ -71,7 +71,7 @@ export function Modal({ title, onClose, footer, children }) {
 
 export function Alert({ kind = 'error', children }) {
   if (!children) return null;
-  const tone = kind === 'error' ? 'bg-red-100 text-red-700' : kind === 'success' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700';
+  const tone = { error: 'bg-red-100 text-red-700', success: 'bg-green-100 text-green-700', info: 'bg-teal-50 text-teal-900' }[kind] ?? 'bg-amber-100 text-amber-700';
   return <div role="alert" className={`rounded-lg px-4 py-3 text-sm ${tone}`}>{children}</div>;
 }
 

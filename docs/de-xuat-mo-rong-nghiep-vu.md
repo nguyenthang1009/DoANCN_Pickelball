@@ -53,18 +53,18 @@ Phân hệ này giải quyết luôn phần `ServiceTile` thiếu ảnh và tồ
 
 Doanh nghiệp tư nhân không bắt buộc dùng hệ số lương như khu vực nhà nước, nên hệ số nên là cấu hình nội bộ theo vị trí, cộng phụ cấp và thưởng.
 
-Bảng `payroll_parameters` (mã tham số, vùng, giá trị, ngày hiệu lực từ, đến, căn cứ pháp lý) lưu các giá trị dưới đây. Đây là số tham khảo để nhập liệu ban đầu và phải đối chiếu văn bản gốc trước khi dùng thật.
+Bảng `payroll_parameters` (mã tham số, vùng, giá trị, ngày hiệu lực từ, đến, căn cứ pháp lý) lưu các giá trị dưới đây, đã đối chiếu với văn bản hiện hành vào tháng 11/2026. Chỉ Admin (quyền `legal.manage`) thêm được phiên bản mới khi luật đổi; số cũ giữ nguyên để kỳ trước vẫn tính đúng.
 
-| Tham số | Giá trị tham khảo | Ghi chú |
+| Tham số | Giá trị | Căn cứ |
 | --- | --- | --- |
 | Lương tối thiểu vùng I | 5.310.000đ/tháng, 25.500đ/giờ | Nghị định 293/2025/NĐ-CP, từ 01/01/2026. Áp dụng theo địa bàn từng cơ sở. Các vùng II, III, IV có mức riêng |
 | Người lao động đóng | BHXH 8%, BHYT 1,5%, BHTN 1%, tổng 10,5% | Các nguồn thống nhất |
 | Doanh nghiệp đóng | BHXH 17,5%, BHYT 3%, BHTN 1%, tổng 21,5% | Các nguồn thống nhất |
-| Trần lương đóng BHXH, BHYT | 46.800.000đ đến 30/06/2026; 50.600.000đ từ 01/07/2026 | Bằng 20 lần mức tham chiếu. Mức từ 01/07/2026 cần đối chiếu văn bản gốc |
-| Trần lương đóng BHTN | 20 lần lương tối thiểu vùng | Khác trần BHXH |
-| Giảm trừ gia cảnh | Bản thân 15.500.000đ, người phụ thuộc 6.200.000đ/tháng | Các nguồn nêu hiệu lực khác nhau, cần đối chiếu |
-| Thuế TNCN lũy tiến | 5 bậc: 5%, 10%, 20%, 30%, 35%; ngưỡng tháng 10, 30, 60, 100 triệu | Các nguồn nêu ngày áp dụng khác nhau, cần đối chiếu |
-| Làm thêm giờ, làm đêm | 150%, 200%, 300%; ban đêm thêm 30% | Điều 98 Bộ luật Lao động 2019. Số này chưa kiểm chứng qua nguồn trong lần rà soát này |
+| Trần lương đóng BHXH, BHYT | 46.800.000đ đến 30/06/2026; 50.600.000đ từ 01/07/2026 | 20 lần mức tham chiếu (Luật BHXH 2024). Lương cơ sở 2.530.000đ từ 01/07/2026 theo Nghị định 161/2026/NĐ-CP |
+| Trần lương đóng BHTN | 20 lần lương tối thiểu vùng | Luật Việc làm 74/2025/QH15, từ 01/01/2026. Khác trần BHXH |
+| Giảm trừ gia cảnh | Bản thân 15.500.000đ, người phụ thuộc 6.200.000đ/tháng | Nghị quyết 110/2025/UBTVQH15. Chỉ dùng khi bật khấu trừ thuế TNCN |
+| Thuế TNCN lũy tiến | 5 bậc: 5%, 10%, 20%, 30%, 35%; ngưỡng tháng 10, 30, 60, 100 triệu | Luật Thuế TNCN 109/2025/QH15. Theo góp ý của giảng viên, đồ án tạm chưa khấu trừ: tham số `PIT_WITHHOLDING` = 0, Admin bật lại được |
+| Làm thêm giờ, làm đêm | 150%, 200%, 300%; ban đêm thêm 30% | Điều 98 Bộ luật Lao động 2019, Điều 55, 56 Nghị định 145/2020/NĐ-CP. Chưa tính khoản thêm 20% khi làm thêm vào ban đêm (Điều 57), sẽ làm cùng chấm công theo ca |
 
 Quy trình: chốt công, tính lương nháp, Manager rà soát, Admin duyệt và khóa kỳ, phát phiếu lương. Kỳ đã khóa không sửa được, chỉ tạo điều chỉnh ở kỳ sau.
 
@@ -159,6 +159,10 @@ Tổng khối lượng trên lớn hơn nhiều so với kế hoạch ban đầu
 - [Tỷ lệ đóng BHXH 2026](https://amis.misa.vn/292831/ty-le-dong-bhxh/)
 - [Tỷ lệ đóng BHXH, BHYT, BHTN và mức đóng tối đa 2026](https://fastca.vn/ty-le-dong-bhxh-bat-buoc-bhyt-bhtn-nam-2026-cu-the-ra-sao)
 - [Biểu thuế TNCN 5 bậc 2026](https://thuvienphapluat.vn/lao-dong-tien-luong/bieu-thue-tncn-2026-ra-sao-56757.html)
+- [Lương cơ sở 2.530.000đ từ 01/7/2026, Nghị định 161/2026/NĐ-CP](https://baochinhphu.vn/chinh-thuc-tang-luong-co-so-len-2530000-dong-thang-tu-01-7-2026-102260516214238878.htm)
+- [Lương tối thiểu vùng theo Nghị định 293/2025/NĐ-CP](https://thuvienphapluat.vn/hoi-dap-phap-luat/nghi-dinh-luong-toi-thieu-vung-2026-la-nghi-dinh-nao-138076681.html)
+- [Nghị định 174/2025/NĐ-CP giảm thuế GTGT](https://thuvienphapluat.vn/van-ban/Thue-Phi-Le-Phi/Nghi-dinh-174-2025-ND-CP-chinh-sach-giam-thue-gia-tri-gia-tang-theo-Nghi-quyet-204-2025-QH15-663151.aspx)
+- [Luật Việc làm 74/2025/QH15](https://thuvienphapluat.vn/van-ban/lao-dong-tien-luong/Luat-Viec-lam-2025-so-74-2025-QH15-530912.aspx)
 - [Mức giảm trừ gia cảnh từ 01/01/2026](https://thuvienphapluat.vn/lao-dong-tien-luong/muc-giam-tru-gia-canh-tu-01012026-la-bao-nhieu-49910.html)
 - [Hiệu lực Luật Bảo vệ dữ liệu cá nhân 2025](https://luatvietnam.vn/dan-su/luat-bao-ve-du-lieu-ca-nhan-2025-co-hieu-luc-khi-nao-568-103652-article.html)
 - [Nghị định 356/2025/NĐ-CP](https://thuvienphapluat.vn/van-ban/Quyen-dan-su/Nghi-dinh-356-2025-ND-CP-huong-dan-Luat-Bao-ve-du-lieu-ca-nhan-687428.aspx)

@@ -18,19 +18,23 @@ async function valueOn(code, date, db = pool) {
 
 const vatRateOn = (date, db = pool) => valueOn('VAT_RATE', date, db);
 
-// Toàn bộ tham số dùng cho một kỳ lương, chốt tại ngày cuối tháng
+const loadCodes = async (codes, date, db) => Object.fromEntries(await Promise.all(Object.entries(codes).map(async ([key, code]) => [key, await valueOn(code, date, db)])));
+
+// Toàn bộ tham số dùng cho một kỳ lương, chốt tại ngày cuối tháng.
+// PIT_WITHHOLDING = 0: chưa khấu trừ thuế TNCN, không cần giảm trừ gia cảnh và biểu thuế.
 async function payrollParametersOn(date, region, db = pool) {
-  const codes = {
+  const base = await loadCodes({
     siEmployee: 'SI_EMPLOYEE', hiEmployee: 'HI_EMPLOYEE', uiEmployee: 'UI_EMPLOYEE', siEmployer: 'SI_EMPLOYER', hiEmployer: 'HI_EMPLOYER', uiEmployer: 'UI_EMPLOYER',
-    siSalaryCap: 'SI_SALARY_CAP', uiCapMultiple: 'UI_CAP_MULTIPLE', siMinWorkDays: 'SI_MIN_WORK_DAYS', pitSelfDeduction: 'PIT_SELF_DEDUCTION',
-    pitDependentDeduction: 'PIT_DEPENDENT_DEDUCTION', otWeekdayRate: 'OT_WEEKDAY_RATE', otWeekendRate: 'OT_WEEKEND_RATE', otHolidayRate: 'OT_HOLIDAY_RATE', nightRate: 'NIGHT_RATE',
-    minWage: `MIN_WAGE_REGION_${region}`,
-  };
-  const entries = await Promise.all(Object.entries(codes).map(async ([key, code]) => [key, await valueOn(code, date, db)]));
+    siSalaryCap: 'SI_SALARY_CAP', uiCapMultiple: 'UI_CAP_MULTIPLE', siMinWorkDays: 'SI_MIN_WORK_DAYS',
+    otWeekdayRate: 'OT_WEEKDAY_RATE', otWeekendRate: 'OT_WEEKEND_RATE', otHolidayRate: 'OT_HOLIDAY_RATE', nightRate: 'NIGHT_RATE',
+    minWage: `MIN_WAGE_REGION_${region}`, pitWithholding: 'PIT_WITHHOLDING',
+  }, date, db);
+  if (!base.pitWithholding) return { ...base, pitSelfDeduction: 0, pitDependentDeduction: 0, brackets: [] };
+  const pit = await loadCodes({ pitSelfDeduction: 'PIT_SELF_DEDUCTION', pitDependentDeduction: 'PIT_DEPENDENT_DEDUCTION' }, date, db);
   const [[{ version }]] = await db.query('SELECT MAX(effective_from) AS version FROM pit_brackets WHERE effective_from <= ?', [date]);
   if (!version) throw new HttpError(409, 'LEGAL_PARAMETER_MISSING', `Chưa có biểu thuế TNCN hiệu lực ngày ${date}`);
   const [brackets] = await db.query('SELECT upper_limit, rate_bp FROM pit_brackets WHERE effective_from = ? ORDER BY upper_limit IS NULL, upper_limit', [version]);
-  return { ...Object.fromEntries(entries), brackets: brackets.map((b) => ({ upperLimit: b.upper_limit === null ? null : Number(b.upper_limit), rateBp: b.rate_bp })) };
+  return { ...base, ...pit, brackets: brackets.map((b) => ({ upperLimit: b.upper_limit === null ? null : Number(b.upper_limit), rateBp: b.rate_bp })) };
 }
 
 async function list() {
@@ -47,6 +51,7 @@ async function addVersion({ code, value, effectiveFrom, legalRef }, actor) {
   assertDate(effectiveFrom, 'effectiveFrom');
   if (!Number.isInteger(value) || value < 0) throw new HttpError(400, 'VALIDATION_ERROR', 'value phải là số nguyên không âm');
   if (typeof legalRef !== 'string' || !legalRef.trim()) throw new HttpError(400, 'VALIDATION_ERROR', 'Cần ghi căn cứ pháp lý');
+  if (code === 'PIT_WITHHOLDING' && value > 1) throw new HttpError(400, 'VALIDATION_ERROR', 'Khấu trừ thuế TNCN chỉ nhận 1 (bật) hoặc 0 (tắt)');
   return withTransaction(async (conn) => {
     const [current] = await conn.query('SELECT * FROM legal_parameters WHERE code = ? ORDER BY effective_from DESC LIMIT 1 FOR UPDATE', [code]);
     if (!current[0]) throw new HttpError(404, 'NOT_FOUND', 'Không có tham số này');

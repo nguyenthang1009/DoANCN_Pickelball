@@ -73,6 +73,7 @@ function toSlip(r) {
     basePay: r.base_pay, allowance: r.allowance, otPay: r.ot_pay, nightPay: r.night_pay, grossPay: r.gross_pay,
     siEmployee: r.si_employee, hiEmployee: r.hi_employee, uiEmployee: r.ui_employee, siEmployer: r.si_employer, hiEmployer: r.hi_employer, uiEmployer: r.ui_employer,
     taxExemptOt: r.tax_exempt_ot, selfDeduction: r.self_deduction, dependentDeduction: r.dependent_deduction, assessableIncome: r.assessable_income, pit: r.pit, netPay: r.net_pay,
+    pitWithholding: r.parameters?.pitWithholding !== 0, // phiếu tính trước khi có công tắc này đều có khấu trừ
   };
 }
 
@@ -85,6 +86,7 @@ function toPeriod(r, slips) {
   const sum = (key) => slips.reduce((t, s) => t + s[key], 0);
   return {
     id: r.id, venueId: r.venue_id, month: r.period_month, standardDays: r.standard_days, status: r.status, createdBy: r.created_by, approvedBy: r.approved_by, slips,
+    pitWithholding: slips.some((s) => s.pitWithholding),
     totals: { gross: sum('grossPay'), net: sum('netPay'), pit: sum('pit'), employeeInsurance: sum('siEmployee') + sum('hiEmployee') + sum('uiEmployee'), employerInsurance: sum('siEmployer') + sum('hiEmployer') + sum('uiEmployer') },
   };
 }

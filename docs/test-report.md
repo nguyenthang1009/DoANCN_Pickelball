@@ -120,6 +120,13 @@ Realtime vẫn đạt: ô lịch đổi sau 90 ms khi có người giữ chỗ t
 
 Ngày chạy: 05/11/2026. `scripts/finance-test.js` gồm các ca tính tay độc lập với code: lương 20, 40, 80 triệu đồng, chạm trần bảo hiểm, làm thêm giờ, dưới 14 ngày công, biểu thuế 5 bậc, tách VAT trên 4.000 mức giá; luồng hóa đơn, hoàn tiền, tiền về trễ, trigger chặn sửa, quy trình lương, đối soát 12 điểm, lọc theo cơ sở.
 
+Chạy lại 12/11/2026: 129 kiểm tra đạt. Thêm 12 ca cho công tắc khấu trừ thuế TNCN (mặc định tắt theo góp ý của giảng viên):
+- Tắt: không có thuế, thực nhận bằng tổng thu nhập trừ 10,5% bảo hiểm.
+- Quản lý không bật được; công tắc chỉ nhận 0 hoặc 1.
+- Admin bật từ 01/2027 thì kỳ 01/2027 có thuế đúng theo giảm trừ gia cảnh và biểu thuế; kỳ 11/2026 đã chốt giữ nguyên.
+
+Tham số pháp lý đã đối chiếu văn bản hiện hành (căn cứ ghi trong `database/seed.sql`). Còn thiếu: khoản thêm 20% khi làm thêm giờ vào ban đêm (Điều 57 Nghị định 145/2020/NĐ-CP).
+
 Lỗi phát hiện và đã sửa:
 
 | Lỗi | Phát hiện bởi | Cách sửa |

@@ -35,8 +35,11 @@ function PayslipDetail({ slip, onClose }) {
   const rows = [
     ['Lương theo ngày công', slip.basePay], ['Phụ cấp', slip.allowance], ['Tiền làm thêm', slip.otPay], ['Phụ cấp ban đêm', slip.nightPay], ['Tổng thu nhập', slip.grossPay, true],
     ['BHXH 8%', -slip.siEmployee], ['BHYT 1,5%', -slip.hiEmployee], ['BHTN 1%', -slip.uiEmployee],
-    ['Giảm trừ bản thân', slip.selfDeduction, false, true], ['Giảm trừ người phụ thuộc', slip.dependentDeduction, false, true], ['Phần làm thêm miễn thuế', slip.taxExemptOt, false, true], ['Thu nhập tính thuế', slip.assessableIncome, false, true],
-    ['Thuế TNCN', -slip.pit], ['Thực nhận', slip.netPay, true],
+    ...(slip.pitWithholding ? [
+      ['Giảm trừ bản thân', slip.selfDeduction, false, true], ['Giảm trừ người phụ thuộc', slip.dependentDeduction, false, true], ['Phần làm thêm miễn thuế', slip.taxExemptOt, false, true], ['Thu nhập tính thuế', slip.assessableIncome, false, true],
+      ['Thuế TNCN', -slip.pit],
+    ] : []),
+    ['Thực nhận', slip.netPay, true],
   ];
   return (
     <Modal title={`Phiếu lương ${slip.month}: ${slip.fullName}`} onClose={onClose} footer={<Button kind="ghost" onClick={onClose}>Đóng</Button>}>
@@ -47,6 +50,7 @@ function PayslipDetail({ slip, onClose }) {
           </div>
         ))}
       </dl>
+      {!slip.pitWithholding && <p className="mt-3 text-xs text-slate-600">Kỳ lương này chưa khấu trừ thuế TNCN.</p>}
       <p className="mt-3 text-xs text-slate-600">Doanh nghiệp đóng thêm {vnd(slip.siEmployer + slip.hiEmployer + slip.uiEmployer)} bảo hiểm cho nhân viên này.</p>
     </Modal>
   );
@@ -76,7 +80,8 @@ function PeriodView({ id, onChanged }) {
   if (!period) return <Spinner />;
   const t = period.totals;
   const [tone, label] = STATUS[period.status];
-  const details = [['Tổng thu nhập', vnd(t.gross)], ['Thực trả', vnd(t.net)], ['Thuế TNCN', vnd(t.pit)], ['Bảo hiểm DN đóng', vnd(t.employerInsurance)]];
+  const details = [['Tổng thu nhập', vnd(t.gross)], ['Thực trả', vnd(t.net)], ...(period.pitWithholding ? [['Thuế TNCN', vnd(t.pit)]] : []), ['Bảo hiểm DN đóng', vnd(t.employerInsurance)]];
+  const columns = ['Nhân sự', 'Ngày công', 'Tổng thu nhập', 'Bảo hiểm', ...(period.pitWithholding ? ['Thuế TNCN'] : []), 'Thực nhận', ''];
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -94,13 +99,15 @@ function PeriodView({ id, onChanged }) {
       <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
         <StatCard label="Tổng thu nhập" value={t.gross} format={vnd} icon="salary" tone="teal" />
         <StatCard label="Thực trả nhân viên" value={t.net} format={vnd} icon="wallet" tone="slate" delay={80} />
-        <StatCard label="Thuế TNCN" value={t.pit} format={vnd} icon="tax" tone="lime" delay={160} />
+        {period.pitWithholding
+          ? <StatCard label="Thuế TNCN" value={t.pit} format={vnd} icon="tax" tone="lime" delay={160} />
+          : <StatCard label="Bảo hiểm NV đóng" value={t.employeeInsurance} format={vnd} note="Kỳ này chưa khấu trừ thuế TNCN" icon="tax" tone="lime" delay={160} />}
         <StatCard label="Bảo hiểm" value={t.employeeInsurance + t.employerInsurance} format={vnd} note={`NV ${vnd(t.employeeInsurance)} · DN ${vnd(t.employerInsurance)}`} icon="shield" delay={240} />
       </div>
       <Card className="p-0">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[820px] text-sm">
-            <thead className="text-xs text-slate-600"><tr>{['Nhân sự', 'Ngày công', 'Tổng thu nhập', 'Bảo hiểm', 'Thuế TNCN', 'Thực nhận', ''].map((h, i) => <th key={h} className={`px-4 py-3 font-medium ${i > 0 && i < 6 ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+            <thead className="text-xs text-slate-600"><tr>{columns.map((h, i) => <th key={h} className={`px-4 py-3 font-medium ${i > 0 && i < columns.length - 1 ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
             <tbody>
               {period.slips.map((s) => (
                 <tr key={s.id} className="border-t border-slate-200">
@@ -108,7 +115,7 @@ function PeriodView({ id, onChanged }) {
                   <td className="px-4 py-3 text-right">{s.workDays}/{s.standardDays}</td>
                   <td className="px-4 py-3 text-right">{vnd(s.grossPay)}</td>
                   <td className="px-4 py-3 text-right">{vnd(s.siEmployee + s.hiEmployee + s.uiEmployee)}</td>
-                  <td className="px-4 py-3 text-right">{vnd(s.pit)}</td>
+                  {period.pitWithholding && <td className="px-4 py-3 text-right">{vnd(s.pit)}</td>}
                   <td className="px-4 py-3 text-right font-bold">{vnd(s.netPay)}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
@@ -253,7 +260,7 @@ export default function Payroll() {
   const tabs = [['periods', 'Bảng lương'], ...(can('payroll.manage') ? [['contracts', 'Hợp đồng']] : [])];
   return (
     <div>
-      <PageHeader title="Tiền lương" subtitle="Bảo hiểm, giảm trừ gia cảnh và thuế TNCN tính theo tham số pháp lý có ngày hiệu lực" scope={scope} />
+      <PageHeader title="Tiền lương" subtitle="Lương, bảo hiểm và làm thêm giờ tính theo tham số pháp lý có ngày hiệu lực" scope={scope} />
       <Tabs tabs={tabs} value={tab} onChange={setTab} />
       {tab === 'periods' ? <Periods scope={scope} /> : <Contracts scope={scope} />}
     </div>

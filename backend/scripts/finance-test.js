@@ -31,7 +31,7 @@ const signData = (data) => crypto.createHmac('sha256', CHECKSUM).update(Object.k
 
 const PARAMS = {
   siEmployee: 800, hiEmployee: 150, uiEmployee: 100, siEmployer: 1750, hiEmployer: 300, uiEmployer: 100, siSalaryCap: 50600000, uiCapMultiple: 20, siMinWorkDays: 14,
-  pitSelfDeduction: 15500000, pitDependentDeduction: 6200000, otWeekdayRate: 15000, otWeekendRate: 20000, otHolidayRate: 30000, nightRate: 3000,
+  pitWithholding: 1, pitSelfDeduction: 15500000, pitDependentDeduction: 6200000, otWeekdayRate: 15000, otWeekendRate: 20000, otHolidayRate: 30000, nightRate: 3000,
   brackets: [{ upperLimit: 10000000, rateBp: 500 }, { upperLimit: 30000000, rateBp: 1000 }, { upperLimit: 60000000, rateBp: 2000 }, { upperLimit: 100000000, rateBp: 3000 }, { upperLimit: null, rateBp: 3500 }],
 };
 const slip = (o) => computePayslip({ allowance: 0, dependents: 0, workDays: 26, standardDays: 26, otWeekdayMinutes: 0, otWeekendMinutes: 0, otHolidayMinutes: 0, nightMinutes: 0, minWage: 5310000, ...o }, PARAMS);
@@ -66,6 +66,9 @@ function testPayrollMath() {
   const e = slip({ baseSalary: 10400000, insuredSalary: 10400000, workDays: 13 });
   same('Dưới 14 ngày công không đóng bảo hiểm', e.siEmployee + e.hiEmployee + e.uiEmployee + e.siEmployer, 0);
   same('Lương theo ngày công thực tế', e.basePay, 5200000);
+  const off = computePayslip({ baseSalary: 40000000, allowance: 0, insuredSalary: 40000000, dependents: 0, workDays: 26, standardDays: 26, otWeekdayMinutes: 120, otWeekendMinutes: 0, otHolidayMinutes: 0, nightMinutes: 0, minWage: 5310000 }, { ...PARAMS, pitWithholding: 0 });
+  same('Tắt khấu trừ thuế TNCN: không có thuế', off.pit + off.assessableIncome + off.selfDeduction + off.taxExemptOt, 0);
+  same('Tắt khấu trừ thuế TNCN: thực nhận chỉ trừ bảo hiểm', off.netPay, off.grossPay - 4200000);
   same('Doanh nghiệp đóng 21,5%', ((s) => s.siEmployer + s.hiEmployer + s.uiEmployer)(slip({ baseSalary: 20000000, insuredSalary: 20000000 })), 4300000);
 }
 
@@ -167,6 +170,9 @@ async function testPayroll(tokens) {
   const after = updated.data.period.slips.find((s) => s.userId === 3);
   same('Nhập chấm công thì tính lại', after.basePay, Math.round((12000000 * 24) / 26));
   same('Tiền làm thêm 2 giờ', after.otPay, Math.round((12000000 / 208) * 3));
+  same('Mặc định chưa khấu trừ thuế TNCN', updated.data.period.pitWithholding, false);
+  same('Thực nhận = tổng thu nhập - bảo hiểm', after.netPay, after.grossPay - after.siEmployee - after.hiEmployee - after.uiEmployee);
+  same('Không phát sinh thuế TNCN', after.pit, 0);
   same('Lễ tân chưa thấy phiếu khi chưa duyệt', (await call('/payroll/my', { token: staff })).data.payslips.length, 0);
   expectError('Quản lý không tự duyệt được', await call(`/payroll/periods/${period.id}/approve`, { method: 'POST', token: manager }), 403, 'FORBIDDEN');
   expectError('Chưa duyệt thì chưa chi trả được', await call(`/payroll/periods/${period.id}/pay`, { method: 'POST', token: admin }), 409, 'PAYROLL_NOT_APPROVED');
@@ -235,6 +241,18 @@ async function testLegalAndSite(db, tokens) {
   check('Thêm phiên bản mới', (await add({ code: 'VAT_RATE', value: 500, effectiveFrom: '2030-01-01', legalRef: 'Thử nghiệm' })).status === 200);
   const [[closed]] = await db.query("SELECT DATE_FORMAT(effective_to, '%Y-%m-%d') AS d FROM legal_parameters WHERE code = 'VAT_RATE' AND value = 1000");
   same('Phiên bản trước tự đóng ngày hiệu lực', closed.d, '2029-12-31');
+
+  expectError('Quản lý không bật được thuế TNCN', await add({ code: 'PIT_WITHHOLDING', value: 1, effectiveFrom: '2027-01-01', legalRef: 'x' }, manager), 403, 'FORBIDDEN');
+  expectError('Công tắc thuế TNCN chỉ nhận 0 hoặc 1', await add({ code: 'PIT_WITHHOLDING', value: 2, effectiveFrom: '2027-01-01', legalRef: 'x' }), 400, 'VALIDATION_ERROR');
+  check('Admin bật khấu trừ thuế TNCN từ 01/2027', (await add({ code: 'PIT_WITHHOLDING', value: 1, effectiveFrom: '2027-01-01', legalRef: 'Luật Thuế TNCN 109/2025/QH15' })).status === 200);
+  const jan = (await call('/payroll/periods', { method: 'POST', token: manager, body: { month: '2027-01', standardDays: 26 } })).data.period;
+  const mgr = jan.slips.find((x) => x.userId === 2);
+  const expected = slip({ baseSalary: 25000000, allowance: 500000, insuredSalary: 25000000, dependents: 1 });
+  check('Kỳ sau ngày bật có khấu trừ thuế TNCN', jan.pitWithholding === true && mgr.pitWithholding === true);
+  same('Thuế TNCN đúng theo giảm trừ gia cảnh và biểu thuế', mgr.pit, expected.pit);
+  check('Thuế dương với lương 25,5 triệu, 1 người phụ thuộc', expected.pit > 0, `-> ${expected.pit}`);
+  const nov = (await call('/payroll/my', { token: tokens.staff })).data.payslips[0];
+  same('Kỳ đã chốt trước đó giữ nguyên, không có thuế', nov.pit, 0);
 
   console.log('\n--- Ảnh và thông tin website');
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');

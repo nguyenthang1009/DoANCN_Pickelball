@@ -5,7 +5,9 @@ import { vnd } from '../../lib/format';
 import PageHeader from '../../components/PageHeader';
 import { Alert, Badge, Button, Card, Input, Modal, Spinner } from '../../components/ui';
 
-const formatValue = (p) => (p.unit === 'VND' ? vnd(p.value) : p.unit === 'BP' ? `${(p.value / 100).toLocaleString('vi-VN')}%` : String(p.value));
+// Công tắc bật/tắt lưu dạng số 1/0
+const SWITCHES = ['PIT_WITHHOLDING'];
+const formatValue = (p) => (SWITCHES.includes(p.code) ? (p.value ? 'Bật' : 'Tắt') : p.unit === 'VND' ? vnd(p.value) : p.unit === 'BP' ? `${(p.value / 100).toLocaleString('vi-VN')}%` : String(p.value));
 const day = (d) => (d ? String(d).slice(0, 10) : '');
 
 function AddVersion({ parameter, onSave, onClose }) {
@@ -14,7 +16,13 @@ function AddVersion({ parameter, onSave, onClose }) {
   return (
     <Modal title={parameter.label} onClose={onClose} footer={<><Button kind="ghost" onClick={onClose}>Đóng</Button><Button onClick={save} disabled={!form.effectiveFrom || !form.legalRef.trim()}>Thêm phiên bản</Button></>}>
       <div className="flex flex-col gap-3">
-        <Input label={parameter.unit === 'BP' ? 'Giá trị mới (%)' : 'Giá trị mới'} type="number" step="any" min="0" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} />
+        {SWITCHES.includes(parameter.code) ? (
+          <label className="flex flex-col gap-1 text-sm font-medium">Trạng thái mới
+            <select className="rounded-lg border border-slate-300 bg-white px-3 py-2" value={form.value} onChange={(e) => setForm({ ...form, value: Number(e.target.value) })}>
+              <option value={1}>Bật</option><option value={0}>Tắt</option>
+            </select>
+          </label>
+        ) : <Input label={parameter.unit === 'BP' ? 'Giá trị mới (%)' : 'Giá trị mới'} type="number" step="any" min="0" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} />}
         <Input label="Hiệu lực từ ngày" type="date" value={form.effectiveFrom} onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })} />
         <Input label="Căn cứ pháp lý" placeholder="Số văn bản, điều khoản" value={form.legalRef} onChange={(e) => setForm({ ...form, legalRef: e.target.value })} />
         <p className="text-xs text-slate-600">Giá trị cũ vẫn được giữ để tính đúng các kỳ trước ngày hiệu lực.</p>
@@ -43,7 +51,7 @@ export default function LegalParameters() {
   return (
     <div>
       <PageHeader title="Tham số pháp lý" subtitle="VAT, bảo hiểm, giảm trừ gia cảnh, lương tối thiểu theo ngày hiệu lực" />
-      <Alert kind="warning">Đây là giá trị tham khảo để nhập liệu ban đầu. Hãy đối chiếu văn bản gốc và nhờ kế toán xác nhận trước khi dùng thật.</Alert>
+      <Alert kind="info">Giá trị theo văn bản hiện hành, căn cứ ghi ở từng dòng. Khi luật thay đổi, thêm phiên bản mới với ngày hiệu lực; kỳ cũ vẫn tính theo số cũ. Chỉ Admin được sửa.</Alert>
       <Alert>{error}</Alert>
       {!data ? <Spinner /> : (
         <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_340px]">
@@ -66,7 +74,8 @@ export default function LegalParameters() {
             </div>
           </Card>
           <Card className="self-start">
-            <h2 className="mb-2 font-semibold">Biểu thuế TNCN lũy tiến</h2>
+            <h2 className="font-semibold">Biểu thuế TNCN lũy tiến</h2>
+            <p className="mb-2 text-xs text-slate-600">Chỉ dùng khi bật “Khấu trừ thuế TNCN khi trả lương”.</p>
             {data.pitBrackets.map((b) => (
               <div key={`${b.effectiveFrom}-${b.upperLimit}`} className="flex justify-between border-t border-slate-200 py-2 text-sm first:border-0">
                 <span>{b.upperLimit ? `Đến ${vnd(b.upperLimit)}` : 'Phần còn lại'}</span><span className="font-semibold">{b.rateBp / 100}%</span>

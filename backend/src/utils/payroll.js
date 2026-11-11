@@ -43,16 +43,17 @@ function computePayslip(input, p) {
   const uiEmployer = percent(uiBase, p.uiEmployer);
   const employeeInsurance = siEmployee + hiEmployee + uiEmployee;
 
+  const result = { basePay, allowance, otPay, nightPay, grossPay, siEmployee, hiEmployee, uiEmployee, siEmployer, hiEmployer, uiEmployer };
+
+  // Tắt khấu trừ thuế TNCN (tham số PIT_WITHHOLDING): thực nhận chỉ trừ bảo hiểm
+  if (!p.pitWithholding) {
+    return { ...result, taxExemptOt: 0, selfDeduction: 0, dependentDeduction: 0, assessableIncome: 0, pit: 0, netPay: grossPay - employeeInsurance };
+  }
   const selfDeduction = p.pitSelfDeduction;
   const dependentDeduction = p.pitDependentDeduction * dependents;
   const assessableIncome = Math.max(0, grossPay - taxExemptOt - employeeInsurance - selfDeduction - dependentDeduction);
   const pit = progressiveTax(assessableIncome, p.brackets);
-  const netPay = grossPay - employeeInsurance - pit;
-
-  return {
-    basePay, allowance, otPay, nightPay, grossPay, siEmployee, hiEmployee, uiEmployee, siEmployer, hiEmployer, uiEmployer,
-    taxExemptOt, selfDeduction, dependentDeduction, assessableIncome, pit, netPay,
-  };
+  return { ...result, taxExemptOt, selfDeduction, dependentDeduction, assessableIncome, pit, netPay: grossPay - employeeInsurance - pit };
 }
 
 module.exports = { computePayslip, progressiveTax };

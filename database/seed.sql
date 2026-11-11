@@ -146,19 +146,19 @@ INSERT INTO role_permissions (role_id, permission_code) VALUES
 (3, 'invoice.view_venue'), (3, 'payroll.view_own'),
 (4, 'invoice.view_own');
 
--- 11. Tham số pháp lý: giá trị tham khảo, cần đối chiếu văn bản gốc trước khi dùng thật
+-- 11. Tham số pháp lý theo văn bản hiện hành (đối chiếu 11/2026, căn cứ ghi ở cột legal_ref). Luật đổi thì Admin thêm phiên bản mới
 INSERT INTO legal_parameters (code, label, value, unit, effective_from, effective_to, legal_ref) VALUES
-('VAT_RATE', 'Thuế suất VAT dịch vụ sân và bán tại quầy', 800, 'BP', '2025-07-01', '2026-12-31', 'Nghị quyết 204/2025/QH15, Nghị định 174/2025/NĐ-CP (cần đối chiếu Phụ lục I, II)'),
-('VAT_RATE', 'Thuế suất VAT dịch vụ sân và bán tại quầy', 1000, 'BP', '2027-01-01', NULL, 'Luật Thuế GTGT 2024, thuế suất phổ thông'),
-('SI_EMPLOYEE', 'BHXH người lao động đóng', 800, 'BP', '2025-07-01', NULL, 'Luật BHXH 2024'),
-('HI_EMPLOYEE', 'BHYT người lao động đóng', 150, 'BP', '2025-07-01', NULL, 'Luật BHYT'),
-('UI_EMPLOYEE', 'BHTN người lao động đóng', 100, 'BP', '2025-07-01', NULL, 'Luật Việc làm'),
-('SI_EMPLOYER', 'BHXH doanh nghiệp đóng', 1750, 'BP', '2025-07-01', NULL, 'Luật BHXH 2024'),
-('HI_EMPLOYER', 'BHYT doanh nghiệp đóng', 300, 'BP', '2025-07-01', NULL, 'Luật BHYT'),
-('UI_EMPLOYER', 'BHTN doanh nghiệp đóng', 100, 'BP', '2025-07-01', NULL, 'Luật Việc làm'),
-('SI_SALARY_CAP', 'Trần lương đóng BHXH, BHYT', 46800000, 'VND', '2025-07-01', '2026-06-30', '20 lần mức tham chiếu 2.340.000đ'),
-('SI_SALARY_CAP', 'Trần lương đóng BHXH, BHYT', 50600000, 'VND', '2026-07-01', NULL, '20 lần mức tham chiếu 2.530.000đ (cần đối chiếu nghị định lương cơ sở)'),
-('UI_CAP_MULTIPLE', 'Trần lương đóng BHTN, số lần lương tối thiểu vùng', 20, 'NUMBER', '2025-07-01', NULL, 'Luật Việc làm'),
+('VAT_RATE', 'Thuế suất VAT dịch vụ sân và bán tại quầy', 800, 'BP', '2025-07-01', '2026-12-31', 'Nghị quyết 204/2025/QH15, Nghị định 174/2025/NĐ-CP: giảm 10% còn 8% đến hết 31/12/2026; dịch vụ thể thao, nước uống, thuê dụng cụ không thuộc nhóm loại trừ'),
+('VAT_RATE', 'Thuế suất VAT dịch vụ sân và bán tại quầy', 1000, 'BP', '2027-01-01', NULL, 'Luật Thuế GTGT 48/2024/QH15, thuế suất 10% khi hết thời hạn giảm'),
+('SI_EMPLOYEE', 'BHXH người lao động đóng', 800, 'BP', '2025-07-01', NULL, 'Luật BHXH 41/2024/QH15: quỹ hưu trí, tử tuất 8%'),
+('HI_EMPLOYEE', 'BHYT người lao động đóng', 150, 'BP', '2025-07-01', NULL, 'Luật BHYT: tổng 4,5%, người lao động 1/3'),
+('UI_EMPLOYEE', 'BHTN người lao động đóng', 100, 'BP', '2025-07-01', NULL, 'Luật Việc làm 2013, từ 01/01/2026 Luật Việc làm 74/2025/QH15: tối đa 1%'),
+('SI_EMPLOYER', 'BHXH doanh nghiệp đóng', 1750, 'BP', '2025-07-01', NULL, 'Luật BHXH 41/2024/QH15: hưu trí, tử tuất 14%, ốm đau, thai sản 3%, tai nạn lao động, bệnh nghề nghiệp 0,5%'),
+('HI_EMPLOYER', 'BHYT doanh nghiệp đóng', 300, 'BP', '2025-07-01', NULL, 'Luật BHYT: tổng 4,5%, doanh nghiệp 2/3'),
+('UI_EMPLOYER', 'BHTN doanh nghiệp đóng', 100, 'BP', '2025-07-01', NULL, 'Luật Việc làm 2013, từ 01/01/2026 Luật Việc làm 74/2025/QH15: tối đa 1%'),
+('SI_SALARY_CAP', 'Trần lương đóng BHXH, BHYT', 46800000, 'VND', '2025-07-01', '2026-06-30', 'Luật BHXH 41/2024/QH15: 20 lần mức tham chiếu, bằng lương cơ sở 2.340.000đ (Nghị định 73/2024/NĐ-CP)'),
+('SI_SALARY_CAP', 'Trần lương đóng BHXH, BHYT', 50600000, 'VND', '2026-07-01', NULL, 'Luật BHXH 41/2024/QH15: 20 lần mức tham chiếu, bằng lương cơ sở 2.530.000đ (Nghị định 161/2026/NĐ-CP, hiệu lực 01/7/2026)'),
+('UI_CAP_MULTIPLE', 'Trần lương đóng BHTN, số lần lương tối thiểu vùng', 20, 'NUMBER', '2025-07-01', NULL, 'Luật Việc làm 2013, Luật Việc làm 74/2025/QH15: tối đa 20 lần lương tối thiểu vùng'),
 ('SI_MIN_WORK_DAYS', 'Số ngày công tối thiểu trong tháng để đóng bảo hiểm', 14, 'NUMBER', '2025-07-01', NULL, 'Luật BHXH 2024 (nghỉ từ 14 ngày làm việc trở lên thì không đóng tháng đó)'),
 ('MIN_WAGE_REGION_1', 'Lương tối thiểu vùng I', 5310000, 'VND', '2026-01-01', NULL, 'Nghị định 293/2025/NĐ-CP'),
 ('MIN_WAGE_REGION_2', 'Lương tối thiểu vùng II', 4730000, 'VND', '2026-01-01', NULL, 'Nghị định 293/2025/NĐ-CP'),
@@ -166,10 +166,11 @@ INSERT INTO legal_parameters (code, label, value, unit, effective_from, effectiv
 ('MIN_WAGE_REGION_4', 'Lương tối thiểu vùng IV', 3700000, 'VND', '2026-01-01', NULL, 'Nghị định 293/2025/NĐ-CP'),
 ('PIT_SELF_DEDUCTION', 'Giảm trừ gia cảnh bản thân mỗi tháng', 15500000, 'VND', '2026-01-01', NULL, 'Nghị quyết 110/2025/UBTVQH15'),
 ('PIT_DEPENDENT_DEDUCTION', 'Giảm trừ mỗi người phụ thuộc mỗi tháng', 6200000, 'VND', '2026-01-01', NULL, 'Nghị quyết 110/2025/UBTVQH15'),
-('OT_WEEKDAY_RATE', 'Hệ số làm thêm ngày thường', 15000, 'BP', '2021-01-01', NULL, 'Điều 98 Bộ luật Lao động 2019 (cần đối chiếu)'),
-('OT_WEEKEND_RATE', 'Hệ số làm thêm ngày nghỉ hằng tuần', 20000, 'BP', '2021-01-01', NULL, 'Điều 98 Bộ luật Lao động 2019 (cần đối chiếu)'),
-('OT_HOLIDAY_RATE', 'Hệ số làm thêm ngày lễ, Tết', 30000, 'BP', '2021-01-01', NULL, 'Điều 98 Bộ luật Lao động 2019 (cần đối chiếu)'),
-('NIGHT_RATE', 'Phụ cấp làm việc ban đêm', 3000, 'BP', '2021-01-01', NULL, 'Điều 98 Bộ luật Lao động 2019 (cần đối chiếu)');
+('OT_WEEKDAY_RATE', 'Hệ số làm thêm ngày thường', 15000, 'BP', '2021-01-01', NULL, 'Khoản 1 Điều 98 Bộ luật Lao động 2019, Điều 55 Nghị định 145/2020/NĐ-CP: ít nhất 150%'),
+('OT_WEEKEND_RATE', 'Hệ số làm thêm ngày nghỉ hằng tuần', 20000, 'BP', '2021-01-01', NULL, 'Khoản 1 Điều 98 Bộ luật Lao động 2019, Điều 55 Nghị định 145/2020/NĐ-CP: ít nhất 200%'),
+('OT_HOLIDAY_RATE', 'Hệ số làm thêm ngày lễ, Tết', 30000, 'BP', '2021-01-01', NULL, 'Khoản 1 Điều 98 Bộ luật Lao động 2019, Điều 55 Nghị định 145/2020/NĐ-CP: ít nhất 300%, chưa kể lương ngày lễ'),
+('NIGHT_RATE', 'Phụ cấp làm việc ban đêm', 3000, 'BP', '2021-01-01', NULL, 'Khoản 2 Điều 98 Bộ luật Lao động 2019, Điều 56 Nghị định 145/2020/NĐ-CP: ít nhất 30%'),
+('PIT_WITHHOLDING', 'Khấu trừ thuế TNCN khi trả lương (1 bật, 0 tắt)', 0, 'NUMBER', '2025-07-01', NULL, 'Phạm vi đồ án: tạm chưa khấu trừ theo góp ý của giảng viên. Bật lại thì áp dụng Luật Thuế TNCN 109/2025/QH15, Nghị quyết 110/2025/UBTVQH15');
 
 INSERT INTO pit_brackets (effective_from, upper_limit, rate_bp, legal_ref) VALUES
 ('2026-01-01', 10000000, 500, 'Luật Thuế TNCN 109/2025/QH15, áp dụng cho kỳ tính thuế 2026'),

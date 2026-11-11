@@ -116,7 +116,7 @@ Mô hình ERP thu nhỏ, tiền lưu VND số nguyên, không dùng số thực:
 - **Hóa đơn:** tự phát hành khi tiền về (tiền mặt, VietQR, bán lẻ) trong cùng transaction với nghiệp vụ, số liên tục theo năm. Giá niêm yết đã gồm thuế, thuế suất chốt lúc phát hành. Hoàn tiền phát hành hóa đơn điều chỉnh giảm.
 - **Sổ cái kế toán kép:** mọi khoản thu, hoàn tiền, lương đều ghi bút toán nợ có; bút toán lệch thì cả nghiệp vụ dừng lại. Báo cáo tài chính đọc từ sổ cái. Trigger MySQL chặn sửa, xóa hóa đơn và sổ cái.
 - **Đối soát:** Admin chạy 12 phép so chéo giữa nghiệp vụ, hóa đơn, sổ cái, PayOS và bảng lương ở mục Tài chính.
-- **Tiền lương:** hợp đồng theo ngày hiệu lực, Quản lý lập bảng và chấm công, Admin duyệt rồi xác nhận chi trả; người lập không tự duyệt được. Tính BHXH, BHYT, BHTN, giảm trừ gia cảnh, thuế TNCN 5 bậc, làm thêm giờ.
+- **Tiền lương:** hợp đồng theo ngày hiệu lực, Quản lý lập bảng và chấm công, Admin duyệt rồi xác nhận chi trả; người lập không tự duyệt được. Tính BHXH, BHYT, BHTN, làm thêm giờ, làm đêm theo tham số pháp lý có ngày hiệu lực. Khấu trừ thuế TNCN (giảm trừ gia cảnh, biểu 5 bậc) mặc định tắt theo phạm vi đồ án, Admin bật lại trong Tham số pháp lý.
 - **Tham số pháp lý:** lưu theo ngày hiệu lực ở mục Tham số pháp lý. Luật đổi thì thêm phiên bản mới, không sửa code.
 
 Hóa đơn hiện là chứng từ nội bộ, chưa phải hóa đơn điện tử có mã của cơ quan thuế; muốn dùng thật cần kết nối nhà cung cấp hóa đơn điện tử. Các tham số thuế là giá trị tham khảo, cần kế toán xác nhận.

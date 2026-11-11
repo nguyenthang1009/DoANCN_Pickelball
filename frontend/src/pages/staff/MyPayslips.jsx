@@ -23,7 +23,7 @@ export default function MyPayslips() {
               <button type="button" onClick={() => setViewing(s)} className="lift w-full rounded-xl border border-slate-200 bg-white p-5 text-left">
                 <p className="text-sm text-slate-600">Tháng {s.month}</p>
                 <p className="mt-1 text-2xl font-black italic">{vnd(s.netPay)}</p>
-                <p className="mt-1 text-xs text-slate-600">Thu nhập {vnd(s.grossPay)} · Thuế {vnd(s.pit)}</p>
+                <p className="mt-1 text-xs text-slate-600">Thu nhập {vnd(s.grossPay)}{s.pitWithholding ? ` · Thuế ${vnd(s.pit)}` : ''}</p>
               </button>
             </Reveal>
           ))}
