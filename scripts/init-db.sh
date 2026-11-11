@@ -23,7 +23,7 @@ echo "-> Dang su dung MySQL tai: $MYSQL_CMD"
 
 # utf8mb4: client mysql tren Windows mac dinh cp850, se lam hong tieng Viet trong seed
 "$MYSQL_CMD" -u "$DB_USER" --default-character-set=utf8mb4 < ./database/schema.sql
-echo "[OK] Da tao 30 bang chuan 3NF va Unique Slot Lock thanh cong!"
+echo "[OK] Da tao 32 bang chuan 3NF va Unique Slot Lock thanh cong!"
 
 "$MYSQL_CMD" -u "$DB_USER" --default-character-set=utf8mb4 "$DB_NAME" < ./database/seed.sql
 echo "[OK] Da nap du lieu mau (Configs, Venues, Courts, Price Rules, Services)!"

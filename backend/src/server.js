@@ -4,6 +4,8 @@ const pool = require('./config/db');
 const realtime = require('./realtime');
 const bookingService = require('./services/booking.service');
 const sessionService = require('./services/session.service');
+const lightingService = require('./services/lighting.service');
+const configService = require('./services/config.service');
 const { port, db, jobIntervalSeconds } = require('./config/env');
 
 async function start() {
@@ -15,6 +17,12 @@ async function start() {
   const tick = () => Promise.all([bookingService.runHousekeeping(), sessionService.purgeExpired()]).catch((err) => console.error('Housekeeping lỗi:', err.message));
   setInterval(tick, jobIntervalSeconds * 1000).unref();
   tick();
+
+  // Vòng điều khiển đèn: trạng thái đặt sân đổi theo giờ nên phải đánh giá lại định kỳ
+  const lightingSeconds = await configService.getNumber('LIGHTING_INTERVAL_SECONDS', 10);
+  const lightingTick = () => lightingService.tick().catch((err) => console.error('Điều khiển đèn lỗi:', err.message));
+  setInterval(lightingTick, lightingSeconds * 1000).unref();
+  lightingTick();
 
   server.listen(port, () => {
     console.log(`API đang chạy tại http://localhost:${port}/api (CSDL ${db.database})`);

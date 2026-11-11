@@ -28,10 +28,10 @@ function send(path, { method = 'GET', body } = {}) {
   return track(fetch(`/api${path}`, { method, headers, credentials: 'include', body: body !== undefined ? JSON.stringify(body) : undefined }));
 }
 
-// Nhiều request cùng hết hạn thì chỉ làm mới phiên một lần
+// Nhiều request cùng hết hạn thì chỉ làm mới phiên một lần. Trả về mã HTTP, 0 khi mất mạng.
 let refreshing = null;
 function refreshSession() {
-  refreshing ??= send('/auth/refresh', { method: 'POST' }).then((r) => r.ok).catch(() => false).finally(() => { refreshing = null; });
+  refreshing ??= send('/auth/refresh', { method: 'POST' }).then((r) => r.status).catch(() => 0).finally(() => { refreshing = null; });
   return refreshing;
 }
 
@@ -49,12 +49,18 @@ export async function api(path, options = {}) {
   let res = await send(path, options);
   let data = await res.json().catch(() => null);
   if (res.status === 401 && sessionHint.get() && SESSION_ERRORS.includes(data?.error?.code) && !NO_RETRY.includes(path)) {
-    if (await refreshSession()) {
+    const status = await refreshSession();
+    if (status >= 200 && status < 300) {
       res = await send(path, options);
       data = await res.json().catch(() => null);
-    } else {
+    } else if (status === 401 || status === 403) {
       sessionHint.set(false);
       window.dispatchEvent(new Event('pkb:session-expired'));
+    } else {
+      // Bị giới hạn tần suất, mất mạng hay máy chủ lỗi: phiên vẫn còn, chỉ báo lỗi chứ không đăng xuất
+      throw status === 429
+        ? new ApiError(429, 'RATE_LIMITED', 'Bạn thao tác quá nhanh, vui lòng thử lại sau ít phút')
+        : new ApiError(status || 503, 'NETWORK_ERROR', 'Không kết nối được máy chủ, vui lòng thử lại');
     }
   }
   if (!res.ok) {

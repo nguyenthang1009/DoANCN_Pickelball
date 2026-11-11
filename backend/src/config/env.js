@@ -32,6 +32,7 @@ module.exports = {
     api: Number(process.env.API_RATE_LIMIT) || 600, // mỗi phút, theo IP
     login: Number(process.env.LOGIN_RATE_LIMIT) || 10, // lần sai trong 15 phút, theo IP + tài khoản
     auth: Number(process.env.AUTH_RATE_LIMIT) || 60, // trong 15 phút, theo IP
+    device: Number(process.env.DEVICE_RATE_LIMIT) || 600, // số đo cảm biến mỗi phút, theo IP
   },
   bcryptRounds: Number(process.env.BCRYPT_ROUNDS) || 10,
   // BR13: khóa ký mã QR check-in; mặc định suy ra từ JWT_SECRET nếu không đặt riêng

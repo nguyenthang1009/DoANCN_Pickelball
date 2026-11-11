@@ -25,6 +25,7 @@ const PATHS = {
   wallet: 'M3 7h18v13H3zM3 7l13-4v4M17 14h.01',
   tax: 'M6 3h12v18H6zM9 8l6 8M9.5 8.5h.01M14.5 15.5h.01',
   check: 'M4 12.5l5 5L20 6.5',
+  bulb: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z',
 };
 
 export const Icon = ({ name, className = 'h-5 w-5' }) => (

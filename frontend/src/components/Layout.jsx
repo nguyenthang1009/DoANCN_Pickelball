@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import { useAuth, homeFor } from '../lib/auth';
 import { useFeedback } from '../lib/feedback';
+import { useLightingWatch } from '../lib/socket';
 import { Icon } from './icons';
 import { Ball } from './motion';
 import { RouteProgress } from './RouteProgress';
@@ -67,6 +68,7 @@ const MENU = [
     { to: '/quan-ly/san', label: 'Sân & bảng giá', icon: 'court', any: ['court.manage', 'price.manage'] },
     { to: '/quan-ly/dich-vu', label: 'Dịch vụ', icon: 'drink', any: ['service.manage'] },
     { to: '/quan-ly/hoan-tien', label: 'Hoàn tiền', icon: 'refund', any: ['booking.refund'] },
+    { to: '/chieu-sang', label: 'Chiếu sáng thông minh', icon: 'bulb', any: ['lighting.view'] },
   ]],
   ['Tài chính', [
     { to: '/tai-chinh', label: 'Tài chính & thuế', icon: 'finance', any: ['finance.view'] },
@@ -99,6 +101,9 @@ export function StaffLayout() {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [pathname]);
+  // Lễ tân, quản lý nhận cảnh báo ở mọi trang khi có người vào sân mà không có đơn
+  const onAlert = useCallback((a) => notify.warning(a.message), [notify]);
+  useLightingWatch(can('lighting.view') ? user.venueId : null, null, onAlert);
 
   const groups = MENU.map(([title, items]) => [title, items.filter((m) => can(...m.any) && !(m.hideForAdmin && user.role === 'ADMIN'))]).filter(([, items]) => items.length);
   const current = MENU.flatMap(([title, items]) => items.map((m) => ({ ...m, group: title }))).find((m) => pathname.startsWith(m.to));

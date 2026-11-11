@@ -13,7 +13,8 @@ export function AuthProvider({ children }) {
     if (!sessionHint.get()) { setReady(true); return; }
     api('/auth/me')
       .then((d) => setUser(d.user))
-      .catch(() => sessionHint.set(false))
+      // Chỉ bỏ cờ phiên khi máy chủ nói chưa đăng nhập; bị giới hạn tần suất hay mất mạng thì giữ để lần sau thử lại
+      .catch((e) => { if (e.status === 401 || e.status === 403) sessionHint.set(false); })
       .finally(() => setReady(true));
   }, []);
 

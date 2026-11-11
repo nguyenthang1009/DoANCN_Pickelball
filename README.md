@@ -43,8 +43,8 @@ Mở `http://localhost:5173`. Vite chuyển `/api` và `/socket.io` sang backend
 | Vai trò | Trang chính |
 | --- | --- |
 | Khách hàng | Trang chủ `/`, ma trận chọn sân `/dat-san`, thanh toán VietQR, vé QR, lịch đặt, hóa đơn của tôi |
-| Lễ tân | POS đặt tại quầy, check-in QR, bán dịch vụ, đơn trong ngày, doanh thu ca, hóa đơn cơ sở, phiếu lương của mình |
-| Quản lý | Như lễ tân + tổng quan doanh thu, sân & bảng giá, dịch vụ, hoàn tiền, tài chính, lập bảng lương (cơ sở của mình) |
+| Lễ tân | POS đặt tại quầy, check-in QR, bán dịch vụ, đơn trong ngày, doanh thu ca, hóa đơn cơ sở, phiếu lương của mình, xem đèn sân |
+| Quản lý | Như lễ tân + tổng quan doanh thu, sân & bảng giá, dịch vụ, hoàn tiền, tài chính, lập bảng lương, điều khiển đèn (cơ sở của mình) |
 | Admin | Như quản lý cho mọi cơ sở + cụm sân, tài khoản, phân quyền, duyệt lương, đối soát, tham số pháp lý, ảnh và nội dung |
 
 Menu và trang được ẩn hiện theo quyền của tài khoản, nên vai trò tự tạo (VD: Thu ngân) chỉ thấy đúng chức năng được cấp.
@@ -123,6 +123,17 @@ Hóa đơn hiện là chứng từ nội bộ, chưa phải hóa đơn điện t
 
 Admin thay ảnh hệ thống, chọn điểm lấy nét khi cắt ảnh theo khổ màn hình và sửa thông tin đồ án ở mục Ảnh & nội dung. Ảnh tải lên nằm ở `backend/uploads/` (không commit).
 
+## Chiếu sáng thông minh
+
+Fuzzy Logic (Mamdani, giải mờ trọng tâm) chỉnh độ sáng đèn từng sân theo ánh sáng môi trường, mức hoạt động trên sân và lịch đặt sân. Đèn chỉ sáng khi có đơn đã thanh toán, có người trên sân mà không có đơn thì báo lễ tân. Có thể nối đèn Yeelight qua mạng LAN. Thiết kế, bảng luật và ví dụ tính tay: [docs/fuzzy-lighting.md](docs/fuzzy-lighting.md).
+
+Giả lập thiết bị IoT gửi số đo cảm biến (đặt `IOT_DEVICE_KEY` trong `.env` trước):
+
+```bash
+cd backend
+IOT_DEVICE_KEY=<khóa trong .env> node scripts/iot-simulator.js http://localhost:3000/api 1,2,3
+```
+
 ## Phân quyền
 
 `users.role` là cấp phạm vi dữ liệu (toàn chuỗi, theo cơ sở, của mình). Quyền dùng chức năng nằm ở `permissions` và `role_permissions`, route kiểm tra bằng `can('booking.refund')`. Đổi quyền có hiệu lực ngay vì mỗi request đọc lại từ CSDL.
@@ -163,6 +174,7 @@ node scripts/race-test.js http://localhost:3000/api 20
 DB_NAME=pickleball_booking node scripts/payment-test.js http://localhost:3000/api
 DB_NAME=pickleball_booking node scripts/security-test.js http://localhost:3000/api
 DB_NAME=pickleball_booking node scripts/finance-test.js http://localhost:3000/api
+DB_NAME=pickleball_booking IOT_DEVICE_KEY=<khóa> node scripts/lighting-test.js http://localhost:3000/api
 ```
 
 Các collection và script tạo thêm dữ liệu thử mỗi lần chạy (`payment-test.js` còn sửa trực tiếp hạn giữ chỗ), nên chạy trên CSDL vừa khởi tạo lại.

@@ -584,3 +584,41 @@ CREATE TABLE site_settings (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_setting_updater FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
+
+
+-- ----------------------------------------------------------------------------
+-- 20. CHIẾU SÁNG THÔNG MINH (FUZZY LOGIC + IOT) - Số đo cảm biến, kết quả điều khiển, nhật ký để tính điện năng
+-- ----------------------------------------------------------------------------
+CREATE TABLE court_lighting (
+    court_id INT UNSIGNED PRIMARY KEY,
+    lux SMALLINT UNSIGNED NULL,                   -- Ánh sáng môi trường; NULL: chưa có số đo, coi như trời tối
+    activity DECIMAL(3,1) NULL,                   -- Mức hoạt động 0-10; NULL: suy ra từ trạng thái check-in
+    sensor_source ENUM('SIMULATOR', 'DEVICE') NULL,
+    sensor_at TIMESTAMP NULL,
+    mode ENUM('AUTO', 'MANUAL') NOT NULL DEFAULT 'AUTO',
+    manual_level TINYINT UNSIGNED NULL,
+    bulb_ip VARCHAR(15) NULL,                     -- Đèn Yeelight trong mạng nội bộ
+    state ENUM('ACTIVE', 'PREPARING', 'IDLE', 'MAINTENANCE') NULL,
+    level TINYINT UNSIGNED NOT NULL DEFAULT 0,    -- Độ sáng đang áp dụng (%)
+    warning BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT chk_lighting_level CHECK (level <= 100 AND (manual_level IS NULL OR manual_level <= 100)),
+    CONSTRAINT fk_lighting_court FOREIGN KEY (court_id) REFERENCES courts(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE lighting_logs (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    court_id INT UNSIGNED NOT NULL,
+    venue_id INT UNSIGNED NOT NULL,
+    state ENUM('ACTIVE', 'PREPARING', 'IDLE', 'MAINTENANCE') NOT NULL,
+    lux SMALLINT UNSIGNED NOT NULL,
+    activity DECIMAL(3,1) NOT NULL,
+    level TINYINT UNSIGNED NOT NULL,
+    warning BOOLEAN NOT NULL,
+    mode ENUM('AUTO', 'MANUAL') NOT NULL,
+    created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    CONSTRAINT fk_lightlog_court FOREIGN KEY (court_id) REFERENCES courts(id) ON DELETE CASCADE,
+    CONSTRAINT fk_lightlog_venue FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE RESTRICT,
+    INDEX idx_lightlog_venue_time (venue_id, created_at),
+    INDEX idx_lightlog_court_time (court_id, created_at)
+) ENGINE=InnoDB;

@@ -129,7 +129,33 @@ Lỗi phát hiện và đã sửa:
 | Đơn tiền về trễ đã hoàn bị báo thiếu hóa đơn | `finance-test.js` | Loại trừ đúng trường hợp không phát sinh doanh thu |
 | Admin không đổi được vai trò sang Lễ tân vì thiếu quyền `payroll.view_own` | `security-test.js` | Cấp quyền đó cho Admin |
 
-## 7. Chưa kiểm thử được
+## 7. Chiếu sáng thông minh
+
+Ngày chạy: 11/11/2026. `scripts/lighting-test.js` gồm 54 kiểm tra; script so sánh với scikit-fuzzy chạy riêng.
+
+| Phạm vi | Kết quả |
+| --- | --- |
+| Suy luận: các mức trong bảng thiết kế, trọng tâm tính tay 93, ví dụ hai luật cùng kích hoạt | Đạt |
+| Không có lỗ hổng luật trên lưới, tính đơn điệu theo ánh sáng và theo hoạt động | Đạt |
+| So với scikit-fuzzy 0.5.0 trên 2.583 điểm | Lệch 0 |
+| Trạng thái theo lịch đặt: chưa tới giờ, cửa sổ check-in, trong giờ, hết giờ, bảo trì, đơn chưa thanh toán | Đạt |
+| Phân quyền, khóa thiết bị, kiểm tra dữ liệu, chặn IP ngoài mạng nội bộ, chế độ thủ công | Đạt |
+| Giao thức Yeelight với đèn giả lập: thứ tự lệnh, độ sáng, nháy cảnh báo, không gửi lặp, tắt hẳn, đèn mất kết nối | Đạt |
+| Ước tính điện năng với số liệu tính tay | Đạt |
+| Cảnh báo realtime tới lễ tân, giao diện ở 1440 px và 390 px | Đạt khi thử thật |
+
+Lỗi phát hiện và đã sửa:
+
+| Lỗi | Phát hiện bởi | Cách sửa |
+| --- | --- | --- |
+| Trọng tâm lệch tới 0,16 điểm % so với scikit-fuzzy | So sánh với scikit-fuzzy | Tích phân theo hình thang thay cho cộng hình chữ nhật |
+| Điện tiết kiệm trong ngày hiện 0,00 kWh khi chưa đủ 10 Wh | Xem giao diện thật | Tính tới 1 Wh, dưới 1 kWh hiện bằng Wh |
+| Lệnh xuống đèn bị gửi hai lần, nhật ký ghi trùng | `lighting-test.js` khi chạy cả bộ | Vòng điều khiển định kỳ và thao tác trên màn hình cùng tính lại một cơ sở. Nay mỗi cơ sở chỉ tính một lần tại một thời điểm. Thử lại với 10 yêu cầu cùng lúc và vòng điều khiển 1 giây: đèn nhận đúng một lượt lệnh; chạy bộ kiểm thử 3 lần liền đều 51/51 |
+| Mở trang chiếu sáng khoảng một phút thì bị đẩy ra trang đăng nhập, đăng nhập lại báo "thao tác quá nhanh" | Người dùng thử thật | Đọc danh sách đèn cũng phát sự kiện "đèn đã đổi", trang nhận được lại đọc tiếp nên thành vòng lặp vô hạn, vượt 600 request/phút. Đồng thời làm mới phiên bị chặn 429 bị hiểu nhầm là phiên hết hạn. Sửa: chỉ phát khi thật sự có thay đổi hoặc vừa có thao tác ghi; trang gom thông báo trong 1,5 giây; 429 hay mất mạng không đăng xuất; số đo cảm biến có giới hạn riêng. Thêm 3 kiểm tra; đo lại trên trình duyệt: 16 request trong 40 giây |
+
+Chưa thử với đèn Yeelight thật, cảm biến BH1750 và camera.
+
+## 8. Chưa kiểm thử được
 
 - **PayOS thật**: chưa có `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`. Cách ký chữ ký làm theo SDK chính thức của payOS; cần chạy thử với tài khoản PayOS sandbox trước khi demo.
 - **Quét QR bằng camera**: trình duyệt kiểm thử không có camera; đã kiểm luồng nhập mã tay và API quét QR (`/checkin/lookup` với chuỗi QR).

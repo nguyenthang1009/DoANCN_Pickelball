@@ -17,11 +17,18 @@ function limiter({ windowMs, limit, message, ...options }) {
 }
 
 // Giới hạn chung theo IP. Webhook PayOS không tính vì đã xác thực bằng chữ ký HMAC.
+// Số đo cảm biến có giới hạn riêng: thiết bị cùng mạng với quầy không được làm lễ tân bị chặn.
 const apiLimiter = limiter({
   windowMs: 60 * 1000,
   limit: limits.api,
   message: 'Bạn thao tác quá nhanh, vui lòng thử lại sau ít phút',
-  skip: (req) => req.path === '/payments/payos/webhook',
+  skip: (req) => req.path === '/payments/payos/webhook' || (req.method === 'POST' && req.path === '/lighting/readings'),
+});
+
+const deviceLimiter = limiter({
+  windowMs: 60 * 1000,
+  limit: limits.device,
+  message: 'Thiết bị gửi số đo quá dày',
 });
 
 // Chống dò mật khẩu: chỉ đếm lần đăng nhập sai, theo cặp IP + tài khoản
@@ -51,4 +58,4 @@ function verifyOrigin(req, res, next) {
   return next();
 }
 
-module.exports = { apiLimiter, loginLimiter, authLimiter, verifyOrigin };
+module.exports = { apiLimiter, deviceLimiter, loginLimiter, authLimiter, verifyOrigin };

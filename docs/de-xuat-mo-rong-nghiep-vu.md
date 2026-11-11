@@ -1,6 +1,6 @@
 # Đề xuất mở rộng nghiệp vụ và hoàn thiện giao diện
 
-Tài liệu này gồm ba phần: khoảng cách giữa giao diện hiện tại và đặc tả UI/UX, các phân hệ nên bổ sung để hệ thống tiến gần một ERP thu nhỏ cho chuỗi sân Pickleball, và thứ tự triển khai đề xuất. Đã làm xong: trang chủ giới thiệu, Đợt 1, hóa đơn và VAT, sổ cái kế toán kép, tiền lương theo chấm công nhập tay, quản lý ảnh. Chưa làm: kho và cho thuê, chấm công bằng QR, xếp ca, sổ chi phí, AI.
+Tài liệu này gồm ba phần: khoảng cách giữa giao diện hiện tại và đặc tả UI/UX, các phân hệ nên bổ sung để hệ thống tiến gần một ERP thu nhỏ cho chuỗi sân Pickleball, và thứ tự triển khai đề xuất. Đã làm xong: trang chủ giới thiệu, Đợt 1, hóa đơn và VAT, sổ cái kế toán kép, tiền lương theo chấm công nhập tay, quản lý ảnh. Đã làm thêm chiếu sáng thông minh bằng Fuzzy Logic (xem [fuzzy-lighting.md](fuzzy-lighting.md)). Chưa làm: kho và cho thuê, chấm công bằng QR, xếp ca, sổ chi phí, AI agent, dự báo.
 
 Hệ thống hiện có sẵn nền tốt để mở rộng: 13 bảng CSDL, `system_configs` cho tham số, `audit_logs` cho nhật ký, phân quyền theo cơ sở (BR15).
 

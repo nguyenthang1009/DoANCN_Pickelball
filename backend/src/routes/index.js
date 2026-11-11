@@ -18,5 +18,6 @@ router.use('/invoices', finance.invoices);
 router.use('/finance', finance.reports);
 router.use('/payroll', finance.salary);
 router.use('/site', finance.content);
+router.use('/lighting', require('./lighting.routes'));
 
 module.exports = router;

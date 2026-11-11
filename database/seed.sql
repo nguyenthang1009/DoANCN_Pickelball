@@ -206,3 +206,16 @@ INSERT INTO site_settings (setting_key, setting_value) VALUES
 ('seller_tax_code', ''),
 ('seller_address', ''),
 ('hotline', '');
+
+
+-- 14. Chiếu sáng thông minh: quyền và tham số
+INSERT INTO permissions (code, module, description, admin_only, sort_order) VALUES
+('lighting.view', 'Chiếu sáng', 'Xem trạng thái đèn sân', 0, 40),
+('lighting.control', 'Chiếu sáng', 'Điều khiển đèn, mô phỏng cảm biến, gán đèn', 0, 41);
+
+INSERT INTO role_permissions (role_id, permission_code) VALUES
+(1, 'lighting.view'), (1, 'lighting.control'), (2, 'lighting.view'), (2, 'lighting.control'), (3, 'lighting.view');
+
+INSERT INTO system_configs (config_key, config_value, description) VALUES
+('COURT_LIGHT_WATTS', '1600', 'Công suất đèn của một sân khi sáng 100% (W), dùng để ước tính điện năng'),
+('LIGHTING_INTERVAL_SECONDS', '10', 'Chu kỳ vòng điều khiển đèn (giây)');
