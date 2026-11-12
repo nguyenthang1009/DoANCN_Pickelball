@@ -162,7 +162,34 @@ Lỗi phát hiện và đã sửa:
 
 Chưa thử với đèn Yeelight thật, cảm biến BH1750 và camera.
 
-## 8. Chưa kiểm thử được
+## 8. Ca làm, chấm công, lương theo hình thức
+
+Ngày chạy: 12/11/2026. `scripts/shift-test.js` gồm 78 kiểm tra, số mong đợi tính tay theo Bộ luật Lao động 2019, Nghị định 145/2020/NĐ-CP, Nghị định 293/2025/NĐ-CP.
+
+| Phạm vi | Kết quả |
+| --- | --- |
+| Bảng công: 8 giờ thường một ngày, phần vượt là làm thêm; ca qua nửa đêm; hai lượt trong một ngày cộng dồn | Đạt |
+| Ngày nghỉ hằng tuần, ngày lễ, lễ trùng Chủ nhật thì nghỉ bù (Giỗ Tổ 26/4/2026 nghỉ bù 27/4) | Đạt |
+| Làm thêm ban đêm 200%, 210% (đã làm thêm ban ngày), 270% (ngày nghỉ), 390% (ngày lễ); làm đêm giờ thường 130% | Đạt, khớp mức nêu trong hướng dẫn Điều 57 Nghị định 145/2020 |
+| Lương tháng, ngày, giờ, ca; ngày lễ hưởng lương; lương tháng không vượt mức hợp đồng | Đạt |
+| Lương tối thiểu giờ: 25.000đ/giờ và ca 200.000đ/8 giờ bị từ chối ở vùng I (25.500đ) | Đạt |
+| Xếp ca: chặn trùng giờ, ca liền nhau không bị coi là trùng, chỉ xếp cho nhân sự đang làm | Đạt |
+| Vào ca tự gắn ca trong lịch; bấm 10 lần cùng lúc chỉ ghi 1 lượt; ra ca khi chưa vào bị chặn | Đạt |
+| Phân quyền: lễ tân không xem lịch xếp ca, không xem ai đang trong ca, không sửa chấm công; quản lý không tự sửa chấm công của mình; chỉ Admin sửa ngày lễ | Đạt |
+| Bảng lương lấy từ chấm công: lương giờ 30.000đ, 16 giờ thường, 3 giờ làm thêm đêm, 4 giờ Chủ nhật ra 900.000đ đúng tính tay | Đạt |
+| Sửa chấm công rồi tính lại; tháng đã duyệt lương thì khóa chấm công | Đạt |
+| Giao diện ở 1280 px và 375 px, không tràn ngang | Đạt khi thử thật |
+
+Lỗi phát hiện và đã sửa:
+
+| Lỗi | Phát hiện bởi | Cách sửa |
+| --- | --- | --- |
+| Admin không cấp được quyền tự chấm công cho vai trò khác vì chính Admin không có quyền này | `security-test.js` | Cấp quyền cho Admin, ẩn mục Chấm công với Admin vì Admin không thuộc cơ sở nào |
+| Trang Chấm công tràn ngang trên điện thoại do bảng chấm công kéo rộng cột lưới | Xem giao diện thật ở 375 px | Cột lưới dùng `minmax(0, 1fr)` |
+
+Chưa làm: tiền lương ngày lễ cho người làm theo giờ, theo ca (luật chưa có công thức chung, cần thỏa thuận trong hợp đồng); chưa cảnh báo khi vượt giới hạn làm thêm 40 giờ một tháng, 200 giờ một năm (Điều 107 BLLĐ 2019).
+
+## 9. Chưa kiểm thử được
 
 - **PayOS thật**: chưa có `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`. Cách ký chữ ký làm theo SDK chính thức của payOS; cần chạy thử với tài khoản PayOS sandbox trước khi demo.
 - **Quét QR bằng camera**: trình duyệt kiểm thử không có camera; đã kiểm luồng nhập mã tay và API quét QR (`/checkin/lookup` với chuỗi QR).

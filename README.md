@@ -43,8 +43,8 @@ Mở `http://localhost:5173`. Vite chuyển `/api` và `/socket.io` sang backend
 | Vai trò | Trang chính |
 | --- | --- |
 | Khách hàng | Trang chủ `/`, ma trận chọn sân `/dat-san`, thanh toán VietQR, vé QR, lịch đặt, hóa đơn của tôi |
-| Lễ tân | POS đặt tại quầy, check-in QR, bán dịch vụ, đơn trong ngày, doanh thu ca, hóa đơn cơ sở, phiếu lương của mình, xem đèn sân |
-| Quản lý | Như lễ tân + tổng quan doanh thu, sân & bảng giá, dịch vụ, hoàn tiền, tài chính, lập bảng lương, điều khiển đèn (cơ sở của mình) |
+| Lễ tân | POS đặt tại quầy, check-in QR, bán dịch vụ, đơn trong ngày, doanh thu ca, hóa đơn cơ sở, phiếu lương của mình, xem đèn sân, tự chấm công |
+| Quản lý | Như lễ tân + tổng quan doanh thu, sân & bảng giá, dịch vụ, hoàn tiền, tài chính, lập bảng lương, điều khiển đèn, xếp ca và sửa chấm công (cơ sở của mình) |
 | Admin | Như quản lý cho mọi cơ sở + cụm sân, tài khoản, phân quyền, duyệt lương, đối soát, tham số pháp lý, ảnh và nội dung |
 
 Menu và trang được ẩn hiện theo quyền của tài khoản, nên vai trò tự tạo (VD: Thu ngân) chỉ thấy đúng chức năng được cấp.
@@ -116,12 +116,21 @@ Mô hình ERP thu nhỏ, tiền lưu VND số nguyên, không dùng số thực:
 - **Hóa đơn:** tự phát hành khi tiền về (tiền mặt, VietQR, bán lẻ) trong cùng transaction với nghiệp vụ, số liên tục theo năm. Giá niêm yết đã gồm thuế, thuế suất chốt lúc phát hành. Hoàn tiền phát hành hóa đơn điều chỉnh giảm.
 - **Sổ cái kế toán kép:** mọi khoản thu, hoàn tiền, lương đều ghi bút toán nợ có; bút toán lệch thì cả nghiệp vụ dừng lại. Báo cáo tài chính đọc từ sổ cái. Trigger MySQL chặn sửa, xóa hóa đơn và sổ cái.
 - **Đối soát:** Admin chạy 12 phép so chéo giữa nghiệp vụ, hóa đơn, sổ cái, PayOS và bảng lương ở mục Tài chính.
-- **Tiền lương:** hợp đồng theo ngày hiệu lực, Quản lý lập bảng và chấm công, Admin duyệt rồi xác nhận chi trả; người lập không tự duyệt được. Tính BHXH, BHYT, BHTN, làm thêm giờ, làm đêm theo tham số pháp lý có ngày hiệu lực. Khấu trừ thuế TNCN (giảm trừ gia cảnh, biểu 5 bậc) mặc định tắt theo phạm vi đồ án, Admin bật lại trong Tham số pháp lý.
+- **Tiền lương:** hợp đồng theo ngày hiệu lực với 4 hình thức trả lương: tháng, ngày, giờ, ca (Điều 96 BLLĐ 2019). Lương giờ, ngày, ca quy ra giờ phải không thấp hơn lương tối thiểu giờ. Quản lý lập bảng, Admin duyệt rồi xác nhận chi trả; người lập không tự duyệt được. Tính BHXH, BHYT, BHTN, làm thêm 150/200/300%, ban đêm 30%, làm thêm ban đêm thêm 20% (200/210/270/390%) theo tham số pháp lý có ngày hiệu lực. Khấu trừ thuế TNCN (giảm trừ gia cảnh, biểu 5 bậc) mặc định tắt theo phạm vi đồ án, Admin bật lại trong Tham số pháp lý.
 - **Tham số pháp lý:** lưu theo ngày hiệu lực ở mục Tham số pháp lý. Luật đổi thì thêm phiên bản mới, không sửa code.
 
 Hóa đơn hiện là chứng từ nội bộ, chưa phải hóa đơn điện tử có mã của cơ quan thuế; muốn dùng thật cần kết nối nhà cung cấp hóa đơn điện tử. Các tham số thuế là giá trị tham khảo, cần kế toán xác nhận.
 
 Admin thay ảnh hệ thống, chọn điểm lấy nét khi cắt ảnh theo khổ màn hình và sửa thông tin đồ án ở mục Ảnh & nội dung. Ảnh tải lên nằm ở `backend/uploads/` (không commit).
+
+## Ca làm và chấm công
+
+- **Xếp ca:** mẫu ca theo cơ sở (sáng, chiều, đêm trực), lịch tuần cho từng nhân sự, chặn xếp trùng giờ. Ca chốt giờ lúc xếp nên sửa mẫu ca không đổi lịch cũ.
+- **Chấm công:** nhân viên tự vào ca, ra ca trên trang Chấm công. Vào trong khung giờ ca (sớm tối đa 30 phút) thì tự gắn với ca. Mỗi người chỉ có một lượt đang mở; CSDL chặn bằng ràng buộc duy nhất nên bấm nhiều lần cùng lúc vẫn chỉ ghi một lượt.
+- **Đang trong ca:** quản lý xem ai đang làm, từ mấy giờ.
+- **Sửa chấm công:** quản lý ghi bù, sửa giờ, bắt buộc ghi lý do, có nhật ký. Không tự sửa chấm công của mình, không sửa tháng đã duyệt lương.
+- **Bảng công:** tổng hợp từng ngày theo luật: tối đa 8 giờ thường một ngày, phần vượt là làm thêm; ngày nghỉ hằng tuần và ngày lễ là làm thêm; ban đêm 22h-6h; lễ trùng ngày nghỉ hằng tuần thì nghỉ bù ngày kế tiếp. Nút "Tính lại từ chấm công" trên bảng lương đổ thẳng số giờ vào phiếu lương.
+- **Ngày lễ:** Admin nhập theo từng năm (đã có 12 ngày của 2026, gồm 24/11 Ngày Văn hóa Việt Nam).
 
 ## Chiếu sáng thông minh
 
@@ -175,6 +184,7 @@ DB_NAME=pickleball_booking node scripts/payment-test.js http://localhost:3000/ap
 DB_NAME=pickleball_booking node scripts/security-test.js http://localhost:3000/api
 DB_NAME=pickleball_booking node scripts/finance-test.js http://localhost:3000/api
 DB_NAME=pickleball_booking IOT_DEVICE_KEY=<khóa> node scripts/lighting-test.js http://localhost:3000/api
+DB_NAME=pickleball_booking node scripts/shift-test.js http://localhost:3000/api
 ```
 
 Các collection và script tạo thêm dữ liệu thử mỗi lần chạy (`payment-test.js` còn sửa trực tiếp hạn giữ chỗ), nên chạy trên CSDL vừa khởi tạo lại.

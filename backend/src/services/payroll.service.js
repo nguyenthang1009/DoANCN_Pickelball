@@ -3,7 +3,9 @@ const HttpError = require('../utils/httpError');
 const { nowInVietnam } = require('../utils/time');
 const withTransaction = require('../utils/transaction');
 const { computePayslip } = require('../utils/payroll');
+const { summarize } = require('../utils/timesheet');
 const audit = require('./audit.service');
+const shifts = require('./shift.service');
 const ledger = require('./ledger.service');
 const legal = require('./legal.service');
 
@@ -11,6 +13,8 @@ const assertVenue = (user, venueId) => {
   if (user.role !== 'ADMIN' && user.venueId !== venueId) throw new HttpError(403, 'FORBIDDEN', 'Bạn chỉ được thao tác trên cơ sở của mình');
 };
 const positiveInt = (v) => Number.isInteger(v) && v >= 0;
+const PAY_TYPES = ['MONTHLY', 'DAILY', 'HOURLY', 'SHIFT'];
+const PAY_TYPE_LABEL = { MONTHLY: 'tháng', DAILY: 'ngày', HOURLY: 'giờ', SHIFT: 'ca' };
 
 // Ngày cuối tháng: mốc lấy tham số pháp lý và hợp đồng của kỳ lương
 function monthEnd(month) {
@@ -20,8 +24,8 @@ function monthEnd(month) {
 
 function toContract(r) {
   return {
-    id: r.id, userId: r.user_id, position: r.position, baseSalary: r.base_salary, allowance: r.allowance, insuredSalary: r.insured_salary,
-    dependents: r.dependents, wageRegion: r.wage_region, effectiveFrom: r.effective_from, effectiveTo: r.effective_to,
+    id: r.id, userId: r.user_id, position: r.position, payType: r.pay_type, baseSalary: r.base_salary, unitHours: Number(r.unit_hours), weeklyRestDay: r.weekly_rest_day,
+    allowance: r.allowance, insuredSalary: r.insured_salary, dependents: r.dependents, wageRegion: r.wage_region, effectiveFrom: r.effective_from, effectiveTo: r.effective_to,
   };
 }
 
@@ -39,8 +43,13 @@ async function listContracts(user, venueId) {
 
 // Đổi hợp đồng là thêm phiên bản mới có ngày hiệu lực, kỳ lương cũ vẫn giữ nguyên số liệu
 async function saveContract(userId, body, actor) {
-  const { position, baseSalary, allowance = 0, insuredSalary, dependents = 0, wageRegion = 1, effectiveFrom } = body;
+  const { position, baseSalary, allowance = 0, insuredSalary, dependents = 0, wageRegion = 1, effectiveFrom, payType = 'MONTHLY', weeklyRestDay = 0 } = body;
+  // Lương giờ: đơn giá đã là một giờ. Lương ngày, lương ca: cần số giờ của một ngày công, một ca để quy ra lương giờ.
+  const unitHours = payType === 'HOURLY' ? 1 : payType === 'MONTHLY' ? 8 : Number(body.unitHours ?? 8);
   if (typeof position !== 'string' || !position.trim()) throw new HttpError(400, 'VALIDATION_ERROR', 'Cần nhập vị trí');
+  if (!PAY_TYPES.includes(payType)) throw new HttpError(400, 'VALIDATION_ERROR', 'Hình thức trả lương phải là tháng, ngày, giờ hoặc ca');
+  if (!(unitHours > 0 && unitHours <= 12 && (unitHours * 2) % 1 === 0)) throw new HttpError(400, 'VALIDATION_ERROR', 'Số giờ một ngày công hoặc một ca từ 0,5 đến 12');
+  if (!(Number.isInteger(weeklyRestDay) && weeklyRestDay >= 0 && weeklyRestDay <= 6)) throw new HttpError(400, 'VALIDATION_ERROR', 'Ngày nghỉ hằng tuần từ 0 (Chủ nhật) đến 6 (Thứ bảy)');
   if (![baseSalary, allowance, insuredSalary, dependents].every(positiveInt) || baseSalary === 0) throw new HttpError(400, 'VALIDATION_ERROR', 'Lương, phụ cấp, số người phụ thuộc phải là số nguyên không âm');
   if (![1, 2, 3, 4].includes(wageRegion)) throw new HttpError(400, 'VALIDATION_ERROR', 'Vùng lương phải từ 1 đến 4');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom || '')) throw new HttpError(400, 'VALIDATION_ERROR', 'Cần ngày hiệu lực');
@@ -49,19 +58,25 @@ async function saveContract(userId, body, actor) {
   assertVenue(actor, users[0].venue_id);
   if (actor.id === userId) throw new HttpError(409, 'CANNOT_EDIT_OWN_CONTRACT', 'Không được tự sửa hợp đồng của mình');
 
-  const minWage = await legal.valueOn(`MIN_WAGE_REGION_${wageRegion}`, effectiveFrom);
-  if (baseSalary < minWage) throw new HttpError(409, 'BELOW_MIN_WAGE', `Lương thấp hơn lương tối thiểu vùng ${wageRegion} (${minWage.toLocaleString('vi-VN')}đ)`);
+  // Điều 4 Nghị định 293/2025/NĐ-CP: lương tháng so với mức tháng; lương giờ, ngày, ca quy ra giờ so với mức giờ
+  if (payType === 'MONTHLY') {
+    const minWage = await legal.valueOn(`MIN_WAGE_REGION_${wageRegion}`, effectiveFrom);
+    if (baseSalary < minWage) throw new HttpError(409, 'BELOW_MIN_WAGE', `Lương thấp hơn lương tối thiểu vùng ${wageRegion} (${minWage.toLocaleString('vi-VN')}đ/tháng)`);
+  } else {
+    const minHourly = await legal.valueOn(`MIN_HOURLY_WAGE_REGION_${wageRegion}`, effectiveFrom);
+    if (baseSalary / unitHours < minHourly) throw new HttpError(409, 'BELOW_MIN_WAGE', `Đơn giá quy ra ${Math.floor(baseSalary / unitHours).toLocaleString('vi-VN')}đ/giờ, thấp hơn lương tối thiểu giờ vùng ${wageRegion} (${minHourly.toLocaleString('vi-VN')}đ/giờ)`);
+  }
 
   return withTransaction(async (conn) => {
     const [current] = await conn.query('SELECT * FROM employee_contracts WHERE user_id = ? AND effective_to IS NULL FOR UPDATE', [userId]);
     if (current[0] && effectiveFrom <= current[0].effective_from) throw new HttpError(409, 'INVALID_EFFECTIVE_DATE', 'Ngày hiệu lực phải sau hợp đồng hiện tại');
     if (current[0]) await conn.query('UPDATE employee_contracts SET effective_to = DATE_SUB(?, INTERVAL 1 DAY) WHERE id = ?', [effectiveFrom, current[0].id]);
     const [res] = await conn.query(
-      `INSERT INTO employee_contracts (user_id, position, base_salary, allowance, insured_salary, dependents, wage_region, effective_from, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [userId, position.trim(), baseSalary, allowance, insuredSalary, dependents, wageRegion, effectiveFrom, actor.id],
+      `INSERT INTO employee_contracts (user_id, position, pay_type, base_salary, unit_hours, weekly_rest_day, allowance, insured_salary, dependents, wage_region, effective_from, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, position.trim(), payType, baseSalary, unitHours, weeklyRestDay, allowance, insuredSalary, dependents, wageRegion, effectiveFrom, actor.id],
     );
-    await audit.log(conn, { actorId: actor.id, venueId: users[0].venue_id, actionType: 'SAVE_CONTRACT', entityType: 'USER', entityId: userId, newValues: { effectiveFrom, position: position.trim() } });
+    await audit.log(conn, { actorId: actor.id, venueId: users[0].venue_id, actionType: 'SAVE_CONTRACT', entityType: 'USER', entityId: userId, newValues: { effectiveFrom, position: position.trim(), payType, baseSalary } });
     return { id: res.insertId };
   });
 }
@@ -69,6 +84,7 @@ async function saveContract(userId, body, actor) {
 function toSlip(r) {
   return {
     id: r.id, userId: r.user_id, fullName: r.full_name, position: r.position, month: r.period_month, venueName: r.venue_name, status: r.status,
+    payType: r.pay_type, payTypeLabel: PAY_TYPE_LABEL[r.pay_type], rate: r.base_salary, source: r.source, paidHolidays: r.paid_holidays, units: Number(r.units), otNightMinutes: r.ot_night_minutes, timesheet: r.timesheet ?? null,
     workDays: Number(r.work_days), standardDays: r.standard_days, otWeekdayMinutes: r.ot_weekday_minutes, otWeekendMinutes: r.ot_weekend_minutes, otHolidayMinutes: r.ot_holiday_minutes, nightMinutes: r.night_minutes,
     basePay: r.base_pay, allowance: r.allowance, otPay: r.ot_pay, nightPay: r.night_pay, grossPay: r.gross_pay,
     siEmployee: r.si_employee, hiEmployee: r.hi_employee, uiEmployee: r.ui_employee, siEmployer: r.si_employer, hiEmployer: r.hi_employer, uiEmployer: r.ui_employer,
@@ -78,7 +94,7 @@ function toSlip(r) {
 }
 
 const SLIP_SELECT = `
-  SELECT s.*, u.full_name, c.position, p.period_month, p.standard_days, p.status, v.name AS venue_name
+  SELECT s.*, u.full_name, c.position, c.base_salary, p.period_month, p.standard_days, p.status, v.name AS venue_name
     FROM payslips s JOIN users u ON u.id = s.user_id JOIN employee_contracts c ON c.id = s.contract_id
     JOIN payroll_periods p ON p.id = s.period_id JOIN venues v ON v.id = p.venue_id`;
 
@@ -115,18 +131,50 @@ async function listPeriods(user, venueId) {
   return rows.map((r) => ({ id: r.id, venueId: r.venue_id, venueName: r.venue_name, month: r.period_month, status: r.status, staff: Number(r.staff), net: Number(r.net) }));
 }
 
-async function recompute(conn, slip, period, input) {
+const ZERO_NIGHT_OT = { weekdayPlain: 0, weekdayAfterDayOt: 0, weekend: 0, holiday: 0 };
+
+// Bảng công của một người trong tháng, tổng hợp từ các lượt vào ra ca
+async function attendanceInput(conn, contract, month, normalDailyHours = 8) {
+  const { records, open } = await shifts.closedRecords(contract.user_id, month, conn);
+  if (!records.length) return { input: null, open };
+  const sheet = summarize(records, {
+    month, restDay: contract.weekly_rest_day, holidays: await shifts.holidaysAround(month, conn),
+    normalDailyMinutes: normalDailyHours * 60, unitMinutes: Number(contract.unit_hours) * 60,
+  });
+  const units = contract.pay_type === 'HOURLY' ? Math.round((sheet.normalMinutes / 60) * 100) / 100 : contract.pay_type === 'SHIFT' ? sheet.units : sheet.workDays;
+  return {
+    open,
+    input: {
+      source: 'ATTENDANCE', workDays: sheet.workDays, paidHolidays: sheet.paidHolidays, units, nightMinutes: sheet.nightMinutes, nightOt: sheet.nightOt,
+      otWeekdayMinutes: sheet.otWeekdayMinutes, otWeekendMinutes: sheet.otWeekendMinutes, otHolidayMinutes: sheet.otHolidayMinutes, timesheet: sheet.days,
+    },
+  };
+}
+
+// Chưa có chấm công: lương tháng mặc định đủ công như trước, các hình thức khác bằng 0 chờ chấm công
+const defaultInput = (contract, standardDays) => ({
+  source: 'MANUAL', workDays: contract.pay_type === 'MONTHLY' ? standardDays : 0, paidHolidays: 0, units: contract.pay_type === 'MONTHLY' ? standardDays : 0,
+  otWeekdayMinutes: 0, otWeekendMinutes: 0, otHolidayMinutes: 0, nightMinutes: 0, nightOt: ZERO_NIGHT_OT, timesheet: null,
+});
+
+async function recompute(conn, slip, period, rawInput) {
   const [contracts] = await conn.query('SELECT * FROM employee_contracts WHERE id = ?', [slip.contract_id]);
   const c = contracts[0];
   const params = await legal.payrollParametersOn(monthEnd(period.period_month), c.wage_region, conn);
+  const input = { source: 'MANUAL', paidHolidays: 0, nightOt: ZERO_NIGHT_OT, timesheet: null, ...rawInput };
+  if (input.units === undefined) input.units = input.workDays;
+  const nightOtTotal = input.nightOt.weekdayPlain + input.nightOt.weekdayAfterDayOt + input.nightOt.weekend + input.nightOt.holiday;
   const result = computePayslip({
-    baseSalary: c.base_salary, allowance: c.allowance, insuredSalary: c.insured_salary, dependents: c.dependents, standardDays: period.standard_days, minWage: params.minWage, ...input,
+    payType: c.pay_type, baseSalary: c.base_salary, unitHours: Number(c.unit_hours), allowance: c.allowance, insuredSalary: c.insured_salary, dependents: c.dependents,
+    standardDays: period.standard_days, minWage: params.minWage, ...input,
   }, params);
   await conn.query(
-    `UPDATE payslips SET work_days = ?, ot_weekday_minutes = ?, ot_weekend_minutes = ?, ot_holiday_minutes = ?, night_minutes = ?,
+    `UPDATE payslips SET pay_type = ?, source = ?, paid_holidays = ?, units = ?, ot_night_minutes = ?, timesheet = ?,
+            work_days = ?, ot_weekday_minutes = ?, ot_weekend_minutes = ?, ot_holiday_minutes = ?, night_minutes = ?,
             base_pay = ?, allowance = ?, ot_pay = ?, night_pay = ?, gross_pay = ?, si_employee = ?, hi_employee = ?, ui_employee = ?, si_employer = ?, hi_employer = ?, ui_employer = ?,
             tax_exempt_ot = ?, self_deduction = ?, dependent_deduction = ?, assessable_income = ?, pit = ?, net_pay = ?, parameters = ? WHERE id = ?`,
-    [input.workDays, input.otWeekdayMinutes, input.otWeekendMinutes, input.otHolidayMinutes, input.nightMinutes,
+    [c.pay_type, input.source, input.paidHolidays, input.units, nightOtTotal, input.timesheet ? JSON.stringify({ days: input.timesheet, nightOt: input.nightOt }) : null,
+      input.workDays, input.otWeekdayMinutes, input.otWeekendMinutes, input.otHolidayMinutes, input.nightMinutes,
       result.basePay, result.allowance, result.otPay, result.nightPay, result.grossPay, result.siEmployee, result.hiEmployee, result.uiEmployee, result.siEmployer, result.hiEmployer, result.uiEmployer,
       result.taxExemptOt, result.selfDeduction, result.dependentDeduction, result.assessableIncome, result.pit, result.netPay, JSON.stringify(params), slip.id],
   );
@@ -142,7 +190,7 @@ async function createPeriod({ venueId, month, standardDays = 26 }, actor) {
   const end = monthEnd(month);
   return withTransaction(async (conn) => {
     const [contracts] = await conn.query(
-      `SELECT c.id, c.user_id FROM employee_contracts c JOIN users u ON u.id = c.user_id
+      `SELECT c.* FROM employee_contracts c JOIN users u ON u.id = c.user_id
         WHERE u.venue_id = ? AND u.is_active = TRUE AND c.effective_from <= ? AND (c.effective_to IS NULL OR c.effective_to >= ?)`,
       [venue, end, end],
     );
@@ -155,9 +203,11 @@ async function createPeriod({ venueId, month, standardDays = 26 }, actor) {
       throw err;
     }
     const period = { period_month: month, standard_days: standardDays };
+    const normalDailyHours = await legal.valueOn('NORMAL_DAILY_HOURS', end, conn);
     for (const c of contracts) {
       const [slip] = await conn.query('INSERT INTO payslips (period_id, user_id, contract_id) VALUES (?, ?, ?)', [res.insertId, c.user_id, c.id]);
-      await recompute(conn, { id: slip.insertId, contract_id: c.id }, period, { workDays: standardDays, otWeekdayMinutes: 0, otWeekendMinutes: 0, otHolidayMinutes: 0, nightMinutes: 0 });
+      const { input } = await attendanceInput(conn, c, month, normalDailyHours);
+      await recompute(conn, { id: slip.insertId, contract_id: c.id }, period, input ?? defaultInput(c, standardDays));
     }
     await audit.log(conn, { actorId: actor.id, venueId: venue, actionType: 'CREATE_PAYROLL', entityType: 'PAYROLL', entityId: res.insertId, newValues: { month, standardDays } });
     return res.insertId;
@@ -169,7 +219,11 @@ async function updateSlip(periodId, slipId, body, actor) {
   const input = {
     workDays: Number(body.workDays), otWeekdayMinutes: Number(body.otWeekdayMinutes ?? 0), otWeekendMinutes: Number(body.otWeekendMinutes ?? 0),
     otHolidayMinutes: Number(body.otHolidayMinutes ?? 0), nightMinutes: Number(body.nightMinutes ?? 0),
+    paidHolidays: Number(body.paidHolidays ?? 0),
   };
+  if (body.units !== undefined) input.units = Number(body.units);
+  if (!positiveInt(input.paidHolidays) || input.paidHolidays > 15) throw new HttpError(400, 'VALIDATION_ERROR', 'Số ngày lễ không hợp lệ');
+  if (input.units !== undefined && !(input.units >= 0 && input.units <= 400 && Math.round(input.units * 100) === input.units * 100)) throw new HttpError(400, 'VALIDATION_ERROR', 'Số giờ, ngày hoặc ca không hợp lệ');
   if (![input.otWeekdayMinutes, input.otWeekendMinutes, input.otHolidayMinutes, input.nightMinutes].every(positiveInt)) throw new HttpError(400, 'VALIDATION_ERROR', 'Thời gian làm thêm phải là số phút nguyên');
   await withTransaction(async (conn) => {
     const period = await getPeriodRow(periodId, conn, true);
@@ -181,6 +235,27 @@ async function updateSlip(periodId, slipId, body, actor) {
     await recompute(conn, slips[0], period, input);
   });
   return getPeriod(periodId, actor);
+}
+
+// Tính lại cả kỳ từ chấm công. Người chưa có lượt nào giữ nguyên số nhập tay.
+async function syncAttendance(periodId, actor) {
+  const warnings = [];
+  await withTransaction(async (conn) => {
+    const period = await getPeriodRow(periodId, conn, true);
+    assertVenue(actor, period.venue_id);
+    if (period.status !== 'DRAFT') throw new HttpError(409, 'PAYROLL_LOCKED', 'Bảng lương đã duyệt, không sửa được');
+    const normalDailyHours = await legal.valueOn('NORMAL_DAILY_HOURS', monthEnd(period.period_month), conn);
+    const [slips] = await conn.query('SELECT s.*, u.full_name FROM payslips s JOIN users u ON u.id = s.user_id WHERE s.period_id = ?', [periodId]);
+    for (const slip of slips) {
+      const [[contract]] = await conn.query('SELECT * FROM employee_contracts WHERE id = ?', [slip.contract_id]);
+      const { input, open } = await attendanceInput(conn, contract, period.period_month, normalDailyHours);
+      if (open) warnings.push(`${slip.full_name} còn ${open} lượt chưa ra ca, chưa được tính`);
+      if (input) await recompute(conn, slip, period, input);
+      else warnings.push(`${slip.full_name} chưa có chấm công tháng này, giữ số cũ`);
+    }
+    await audit.log(conn, { actorId: actor.id, venueId: period.venue_id, actionType: 'SYNC_ATTENDANCE', entityType: 'PAYROLL', entityId: periodId, newValues: { warnings: warnings.length } });
+  });
+  return { period: await getPeriod(periodId, actor), warnings };
 }
 
 // Duyệt: khóa số liệu và ghi sổ. Người lập không được tự duyệt.
@@ -228,4 +303,4 @@ async function myPayslips(user) {
   return rows.map(toSlip);
 }
 
-module.exports = { listContracts, saveContract, listPeriods, getPeriod, createPeriod, updateSlip, approve, markPaid, myPayslips };
+module.exports = { listContracts, saveContract, listPeriods, getPeriod, createPeriod, updateSlip, syncAttendance, approve, markPaid, myPayslips };

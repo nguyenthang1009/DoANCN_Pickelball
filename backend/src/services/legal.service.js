@@ -27,6 +27,7 @@ async function payrollParametersOn(date, region, db = pool) {
     siEmployee: 'SI_EMPLOYEE', hiEmployee: 'HI_EMPLOYEE', uiEmployee: 'UI_EMPLOYEE', siEmployer: 'SI_EMPLOYER', hiEmployer: 'HI_EMPLOYER', uiEmployer: 'UI_EMPLOYER',
     siSalaryCap: 'SI_SALARY_CAP', uiCapMultiple: 'UI_CAP_MULTIPLE', siMinWorkDays: 'SI_MIN_WORK_DAYS',
     otWeekdayRate: 'OT_WEEKDAY_RATE', otWeekendRate: 'OT_WEEKEND_RATE', otHolidayRate: 'OT_HOLIDAY_RATE', nightRate: 'NIGHT_RATE',
+    nightOtExtraRate: 'NIGHT_OT_EXTRA_RATE', normalDailyHours: 'NORMAL_DAILY_HOURS',
     minWage: `MIN_WAGE_REGION_${region}`, pitWithholding: 'PIT_WITHHOLDING',
   }, date, db);
   if (!base.pitWithholding) return { ...base, pitSelfDeduction: 0, pitDependentDeduction: 0, brackets: [] };

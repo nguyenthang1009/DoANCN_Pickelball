@@ -33,6 +33,8 @@ const InvoiceDetail = lazy(() => import('./pages/shared/InvoiceDetail'));
 const Finance = lazy(() => import('./pages/finance/Finance'));
 const Payroll = lazy(() => import('./pages/finance/Payroll'));
 const Lighting = lazy(() => import('./pages/manager/Lighting'));
+const ShiftPlanner = lazy(() => import('./pages/manager/ShiftPlanner'));
+const MyAttendance = lazy(() => import('./pages/staff/MyAttendance'));
 
 // Phân quyền giao diện theo mã chức năng; backend vẫn kiểm tra lại mọi API
 const guard = (any, el) => <RequireAccess any={any}><Suspense fallback={<PageLoader />}>{el}</Suspense></RequireAccess>;
@@ -72,6 +74,8 @@ export default function App() {
         <Route path="/hoa-don-co-so" element={guard(['invoice.view_venue'], <Invoices />)} />
         <Route path="/tai-chinh" element={guard(['finance.view'], <Finance />)} />
         <Route path="/chieu-sang" element={guard(['lighting.view'], <Lighting />)} />
+        <Route path="/ca-lam" element={guard(['shift.manage'], <ShiftPlanner />)} />
+        <Route path="/cham-cong" element={guard(['attendance.self'], <MyAttendance />)} />
         <Route path="/tien-luong" element={guard(['payroll.manage', 'payroll.approve'], <Payroll />)} />
         <Route path="/phieu-luong" element={guard(['payroll.view_own'], <MyPayslips />)} />
       </Route>

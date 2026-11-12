@@ -220,3 +220,37 @@ INSERT INTO role_permissions (role_id, permission_code) VALUES
 INSERT INTO system_configs (config_key, config_value, description) VALUES
 ('COURT_LIGHT_WATTS', '1600', 'Công suất đèn của một sân khi sáng 100% (W), dùng để ước tính điện năng'),
 ('LIGHTING_INTERVAL_SECONDS', '10', 'Chu kỳ vòng điều khiển đèn (giây)');
+
+-- 15. Xếp ca, chấm công và lương theo hình thức: quyền, tham số pháp lý, ngày lễ 2026, mẫu ca
+INSERT INTO permissions (code, module, description, admin_only, sort_order) VALUES
+('shift.manage', 'Ca làm', 'Xếp ca, sửa chấm công, xem ai đang trong ca', 0, 42),
+('attendance.self', 'Ca làm', 'Tự vào ca, ra ca và xem lịch ca của mình', 0, 43);
+
+INSERT INTO role_permissions (role_id, permission_code) VALUES
+(1, 'shift.manage'), (1, 'attendance.self'), (2, 'shift.manage'), (2, 'attendance.self'), (3, 'attendance.self');
+
+INSERT INTO legal_parameters (code, label, value, unit, effective_from, effective_to, legal_ref) VALUES
+('MIN_HOURLY_WAGE_REGION_1', 'Lương tối thiểu giờ vùng I', 25500, 'VND', '2026-01-01', NULL, 'Nghị định 293/2025/NĐ-CP'),
+('MIN_HOURLY_WAGE_REGION_2', 'Lương tối thiểu giờ vùng II', 22700, 'VND', '2026-01-01', NULL, 'Nghị định 293/2025/NĐ-CP'),
+('MIN_HOURLY_WAGE_REGION_3', 'Lương tối thiểu giờ vùng III', 20000, 'VND', '2026-01-01', NULL, 'Nghị định 293/2025/NĐ-CP'),
+('MIN_HOURLY_WAGE_REGION_4', 'Lương tối thiểu giờ vùng IV', 17800, 'VND', '2026-01-01', NULL, 'Nghị định 293/2025/NĐ-CP'),
+('NIGHT_OT_EXTRA_RATE', 'Làm thêm ban đêm: trả thêm trên lương giờ ban ngày', 2000, 'BP', '2021-01-01', NULL, 'Khoản 3 Điều 98 Bộ luật Lao động 2019, Điều 57 Nghị định 145/2020/NĐ-CP: thêm 20%'),
+('NORMAL_DAILY_HOURS', 'Giờ làm việc bình thường tối đa một ngày', 8, 'NUMBER', '2021-01-01', NULL, 'Khoản 1 Điều 105 Bộ luật Lao động 2019: không quá 8 giờ một ngày');
+
+INSERT INTO public_holidays (holiday_date, name, legal_ref) VALUES
+('2026-01-01', 'Tết Dương lịch', 'Điểm a khoản 1 Điều 112 Bộ luật Lao động 2019'),
+('2026-02-16', 'Tết Âm lịch', 'Điểm b khoản 1 Điều 112 Bộ luật Lao động 2019'),
+('2026-02-17', 'Tết Âm lịch', 'Điểm b khoản 1 Điều 112 Bộ luật Lao động 2019'),
+('2026-02-18', 'Tết Âm lịch', 'Điểm b khoản 1 Điều 112 Bộ luật Lao động 2019'),
+('2026-02-19', 'Tết Âm lịch', 'Điểm b khoản 1 Điều 112 Bộ luật Lao động 2019'),
+('2026-02-20', 'Tết Âm lịch', 'Điểm b khoản 1 Điều 112 Bộ luật Lao động 2019'),
+('2026-04-26', 'Giỗ Tổ Hùng Vương (10/3 âm lịch)', 'Điểm đ khoản 1 Điều 112 Bộ luật Lao động 2019'),
+('2026-04-30', 'Ngày Chiến thắng', 'Điểm c khoản 1 Điều 112 Bộ luật Lao động 2019'),
+('2026-05-01', 'Ngày Quốc tế lao động', 'Điểm d khoản 1 Điều 112 Bộ luật Lao động 2019'),
+('2026-09-01', 'Quốc khánh (ngày liền kề, doanh nghiệp chọn)', 'Điểm đ khoản 1 Điều 112 Bộ luật Lao động 2019'),
+('2026-09-02', 'Quốc khánh', 'Điểm đ khoản 1 Điều 112 Bộ luật Lao động 2019'),
+('2026-11-24', 'Ngày Văn hóa Việt Nam', 'Nghị quyết 28/2026/QH16');
+
+INSERT INTO shift_templates (venue_id, name, start_time, end_time) VALUES
+(1, 'Ca sáng', '06:00:00', '14:00:00'), (1, 'Ca chiều', '14:00:00', '22:00:00'), (1, 'Ca đêm trực', '22:00:00', '06:00:00'),
+(2, 'Ca sáng', '06:00:00', '14:00:00'), (2, 'Ca chiều', '14:00:00', '22:00:00'), (2, 'Ca đêm trực', '22:00:00', '06:00:00');

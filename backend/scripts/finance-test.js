@@ -31,7 +31,7 @@ const signData = (data) => crypto.createHmac('sha256', CHECKSUM).update(Object.k
 
 const PARAMS = {
   siEmployee: 800, hiEmployee: 150, uiEmployee: 100, siEmployer: 1750, hiEmployer: 300, uiEmployer: 100, siSalaryCap: 50600000, uiCapMultiple: 20, siMinWorkDays: 14,
-  pitWithholding: 1, pitSelfDeduction: 15500000, pitDependentDeduction: 6200000, otWeekdayRate: 15000, otWeekendRate: 20000, otHolidayRate: 30000, nightRate: 3000,
+  pitWithholding: 1, pitSelfDeduction: 15500000, pitDependentDeduction: 6200000, otWeekdayRate: 15000, otWeekendRate: 20000, otHolidayRate: 30000, nightRate: 3000, nightOtExtraRate: 2000, normalDailyHours: 8,
   brackets: [{ upperLimit: 10000000, rateBp: 500 }, { upperLimit: 30000000, rateBp: 1000 }, { upperLimit: 60000000, rateBp: 2000 }, { upperLimit: 100000000, rateBp: 3000 }, { upperLimit: null, rateBp: 3500 }],
 };
 const slip = (o) => computePayslip({ allowance: 0, dependents: 0, workDays: 26, standardDays: 26, otWeekdayMinutes: 0, otWeekendMinutes: 0, otHolidayMinutes: 0, nightMinutes: 0, minWage: 5310000, ...o }, PARAMS);
@@ -60,7 +60,7 @@ function testPayrollMath() {
 
   const d = slip({ baseSalary: 10400000, insuredSalary: 10400000, otWeekdayMinutes: 120, otWeekendMinutes: 60, otHolidayMinutes: 60, nightMinutes: 60 });
   same('Làm thêm: 2 giờ thường, 1 giờ nghỉ, 1 giờ lễ', d.otPay, 150000 + 100000 + 150000);
-  same('Phần cao hơn giờ thường được miễn thuế', d.taxExemptOt, 200000);
+  same('Phần trả cao hơn làm ban ngày, trong giờ được miễn thuế (làm thêm và ban đêm)', d.taxExemptOt, 215000);
   same('Phụ cấp đêm 30%', d.nightPay, 15000);
 
   const e = slip({ baseSalary: 10400000, insuredSalary: 10400000, workDays: 13 });

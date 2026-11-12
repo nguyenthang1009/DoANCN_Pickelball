@@ -19,5 +19,6 @@ router.use('/finance', finance.reports);
 router.use('/payroll', finance.salary);
 router.use('/site', finance.content);
 router.use('/lighting', require('./lighting.routes'));
+router.use('/shifts', require('./shift.routes'));
 
 module.exports = router;

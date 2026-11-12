@@ -31,6 +31,53 @@ function AddVersion({ parameter, onSave, onClose }) {
   );
 }
 
+// Ngày lễ hưởng nguyên lương (Điều 112 BLLĐ 2019): làm vào ngày này tính 300%, lễ trùng ngày nghỉ tuần thì nghỉ bù
+function Holidays() {
+  const { notify, confirm } = useFeedback();
+  const [year, setYear] = useState(new Date(Date.now() + 7 * 3600e3).getUTCFullYear());
+  const [list, setList] = useState(null);
+  const [form, setForm] = useState({ date: '', name: '', legalRef: 'Điều 112 Bộ luật Lao động 2019' });
+  useEffect(() => { api(`/shifts/holidays?year=${year}`).then((d) => setList(d.holidays)).catch((e) => notify.error(e.message)); }, [year, notify]);
+  async function add() {
+    try {
+      const d = await api('/shifts/holidays', { method: 'POST', body: form });
+      if (form.date.startsWith(String(year))) setList(d.holidays);
+      notify.success(`Đã thêm ngày lễ ${form.date}`);
+      setForm({ ...form, date: '', name: '' });
+    } catch (e) { notify.error(e.message); }
+  }
+  async function remove(h) {
+    if (!(await confirm({ title: `Bỏ ngày lễ ${h.date}?`, message: `${h.name}. Bảng lương đã duyệt không đổi; bảng lương nháp tính lại sẽ coi ngày này là ngày thường.`, confirmText: 'Bỏ ngày lễ', tone: 'warning' }))) return;
+    try { setList((await api(`/shifts/holidays/${h.date}`, { method: 'DELETE' })).holidays); } catch (e) { notify.error(e.message); }
+  }
+  return (
+    <div className="mt-6 grid gap-4 xl:grid-cols-[1fr_340px]">
+      <Card className="p-0">
+        <div className="flex flex-wrap items-end justify-between gap-3 p-4">
+          <div><h2 className="font-semibold">Ngày lễ, tết hưởng nguyên lương</h2><p className="text-xs text-slate-600">Dùng để tính làm thêm ngày lễ 300% và ngày lễ hưởng lương. Lễ trùng ngày nghỉ hằng tuần thì hệ thống tự cho nghỉ bù ngày kế tiếp.</p></div>
+          <Input label="Năm" type="number" min="2025" max="2100" value={year} onChange={(e) => setYear(Number(e.target.value))} />
+        </div>
+        {!list ? <Spinner /> : list.length === 0 ? <p className="px-4 pb-4 text-sm text-amber-700">Chưa nhập ngày lễ của năm {year}.</p> : list.map((h) => (
+          <div key={h.date} className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-2 text-sm">
+            <span><span className="font-semibold tabular-nums">{h.date.slice(8, 10)}/{h.date.slice(5, 7)}</span> · {h.name}<span className="block text-xs text-slate-600">{h.legalRef}</span></span>
+            <Button kind="ghost" className="px-3 py-1 text-sm" onClick={() => remove(h)}>Bỏ</Button>
+          </div>
+        ))}
+      </Card>
+      <Card className="self-start">
+        <h2 className="mb-3 font-semibold">Thêm ngày lễ</h2>
+        <div className="flex flex-col gap-3">
+          <Input label="Ngày" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+          <Input label="Tên" placeholder="VD: Tết Âm lịch" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Input label="Căn cứ" value={form.legalRef} onChange={(e) => setForm({ ...form, legalRef: e.target.value })} />
+          <Button onClick={add} disabled={!form.date || !form.name.trim() || !form.legalRef.trim()}>Thêm ngày lễ</Button>
+          <p className="text-xs text-slate-600">Tết Âm lịch và ngày liền kề Quốc khánh thay đổi theo từng năm, cần nhập theo thông báo chính thức.</p>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // Luật đổi thì thêm phiên bản theo ngày hiệu lực, không sửa số cũ, không phải sửa code
 export default function LegalParameters() {
   const { notify, confirm } = useFeedback();
@@ -84,6 +131,7 @@ export default function LegalParameters() {
           </Card>
         </div>
       )}
+      <Holidays />
       {editing && <AddVersion parameter={editing} onSave={save} onClose={() => setEditing(null)} />}
     </div>
   );

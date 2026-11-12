@@ -30,6 +30,7 @@ salary.get('/periods', can('payroll.manage', 'payroll.approve'), send(async (req
 salary.post('/periods', can('payroll.manage'), send(async (req) => ({ period: await payroll.createPeriod(req.body || {}, req.user) })));
 salary.get('/periods/:id', can('payroll.manage', 'payroll.approve'), send(async (req) => ({ period: await payroll.getPeriod(Number(req.params.id), req.user) })));
 salary.patch('/periods/:id/payslips/:slipId', can('payroll.manage'), send(async (req) => ({ period: await payroll.updateSlip(Number(req.params.id), Number(req.params.slipId), req.body || {}, req.user) })));
+salary.post('/periods/:id/sync-attendance', can('payroll.manage'), send((req) => payroll.syncAttendance(Number(req.params.id), req.user)));
 salary.post('/periods/:id/approve', can('payroll.approve'), send(async (req) => ({ period: await payroll.approve(Number(req.params.id), req.user) })));
 salary.post('/periods/:id/pay', can('payroll.approve'), send(async (req) => ({ period: await payroll.markPaid(Number(req.params.id), req.user) })));
 

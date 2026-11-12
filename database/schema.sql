@@ -494,7 +494,10 @@ CREATE TABLE employee_contracts (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id INT UNSIGNED NOT NULL,
     position VARCHAR(100) NOT NULL,
-    base_salary INT UNSIGNED NOT NULL,            -- Lương thỏa thuận theo tháng
+    pay_type ENUM('MONTHLY', 'DAILY', 'HOURLY', 'SHIFT') NOT NULL DEFAULT 'MONTHLY', -- Hình thức trả lương (Điều 96 BLLĐ 2019)
+    base_salary INT UNSIGNED NOT NULL,            -- Lương tháng, hoặc đơn giá một ngày / một giờ / một ca
+    unit_hours DECIMAL(3,1) NOT NULL DEFAULT 8.0, -- Số giờ của một ngày công hoặc một ca, để quy ra lương giờ
+    weekly_rest_day TINYINT UNSIGNED NOT NULL DEFAULT 0, -- Ngày nghỉ hằng tuần 0 = Chủ nhật ... 6 = Thứ bảy (Điều 111)
     allowance INT UNSIGNED NOT NULL DEFAULT 0,    -- Phụ cấp tính thuế
     insured_salary INT UNSIGNED NOT NULL,         -- Lương đóng bảo hiểm
     dependents TINYINT UNSIGNED NOT NULL DEFAULT 0,  -- Người phụ thuộc đã đăng ký giảm trừ
@@ -505,6 +508,7 @@ CREATE TABLE employee_contracts (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_contract UNIQUE (user_id, effective_from),
     CONSTRAINT chk_region CHECK (wage_region BETWEEN 1 AND 4),
+    CONSTRAINT chk_contract_hours CHECK (unit_hours > 0 AND unit_hours <= 12 AND weekly_rest_day <= 6),
     CONSTRAINT fk_contract_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
     CONSTRAINT fk_contract_updater FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
@@ -531,12 +535,18 @@ CREATE TABLE payslips (
     period_id INT UNSIGNED NOT NULL,
     user_id INT UNSIGNED NOT NULL,
     contract_id INT UNSIGNED NOT NULL,
+    pay_type ENUM('MONTHLY', 'DAILY', 'HOURLY', 'SHIFT') NOT NULL DEFAULT 'MONTHLY',
+    source ENUM('MANUAL', 'ATTENDANCE') NOT NULL DEFAULT 'MANUAL', -- Nhập tay hay tổng hợp từ chấm công
     -- Dữ liệu chấm công (giờ làm thêm tính theo phút để tránh số lẻ)
     work_days DECIMAL(4,1) NOT NULL DEFAULT 0,
+    paid_holidays TINYINT UNSIGNED NOT NULL DEFAULT 0, -- Ngày lễ hưởng nguyên lương (Điều 112)
+    units DECIMAL(7,2) NOT NULL DEFAULT 0,        -- Số giờ / ngày / ca trong giờ làm việc bình thường
     ot_weekday_minutes INT UNSIGNED NOT NULL DEFAULT 0,
     ot_weekend_minutes INT UNSIGNED NOT NULL DEFAULT 0,
     ot_holiday_minutes INT UNSIGNED NOT NULL DEFAULT 0,
-    night_minutes INT UNSIGNED NOT NULL DEFAULT 0,
+    night_minutes INT UNSIGNED NOT NULL DEFAULT 0, -- Làm ban đêm trong giờ bình thường
+    ot_night_minutes INT UNSIGNED NOT NULL DEFAULT 0, -- Phần làm thêm rơi vào ban đêm (đã nằm trong ot_*_minutes)
+    timesheet JSON NULL,                          -- Chi tiết từng ngày khi tổng hợp từ chấm công
     -- Kết quả tính
     base_pay INT UNSIGNED NOT NULL DEFAULT 0,
     allowance INT UNSIGNED NOT NULL DEFAULT 0,
@@ -621,4 +631,70 @@ CREATE TABLE lighting_logs (
     CONSTRAINT fk_lightlog_venue FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE RESTRICT,
     INDEX idx_lightlog_venue_time (venue_id, created_at),
     INDEX idx_lightlog_court_time (court_id, created_at)
+) ENGINE=InnoDB;
+
+-- ----------------------------------------------------------------------------
+-- 21. XẾP CA VÀ CHẤM CÔNG - Mẫu ca, lịch ca theo ngày, giờ vào ra thực tế, ngày lễ để tính lương theo luật.
+-- Giờ lưu kiểu DATETIME theo giờ Việt Nam để cắt ngày, ban đêm (22h-6h) đúng như trên bảng công.
+-- ----------------------------------------------------------------------------
+CREATE TABLE public_holidays (
+    holiday_date DATE PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    legal_ref VARCHAR(255) NOT NULL,
+    updated_by INT UNSIGNED NULL,
+    CONSTRAINT fk_holiday_updater FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE shift_templates (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    venue_id INT UNSIGNED NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,                       -- Nhỏ hơn giờ bắt đầu: ca qua nửa đêm
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    CONSTRAINT uq_shift_name UNIQUE (venue_id, name),
+    CONSTRAINT chk_shift_times CHECK (start_time <> end_time),
+    CONSTRAINT fk_shift_venue FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE shift_assignments (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    venue_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    template_id INT UNSIGNED NOT NULL,
+    work_date DATE NOT NULL,
+    starts_at DATETIME NOT NULL,                  -- Chốt giờ ca lúc xếp, sửa mẫu ca không đổi lịch cũ
+    ends_at DATETIME NOT NULL,
+    created_by INT UNSIGNED NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_assignment UNIQUE (user_id, work_date, template_id),
+    CONSTRAINT chk_assignment_times CHECK (ends_at > starts_at),
+    CONSTRAINT fk_assign_venue FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_assign_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_assign_template FOREIGN KEY (template_id) REFERENCES shift_templates(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_assign_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT,
+    INDEX idx_assign_venue_date (venue_id, work_date)
+) ENGINE=InnoDB;
+
+CREATE TABLE attendance_records (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    venue_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    assignment_id INT UNSIGNED NULL,              -- NULL: làm ngoài lịch ca
+    clock_in DATETIME NOT NULL,
+    clock_out DATETIME NULL,                      -- NULL: đang trong ca
+    source ENUM('SELF', 'MANAGER') NOT NULL DEFAULT 'SELF',
+    note VARCHAR(255) NULL,
+    updated_by INT UNSIGNED NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Mỗi người chỉ có một lượt đang mở: cột sinh ra bằng user_id khi chưa ra ca, NULL khi đã ra
+    open_user_id INT UNSIGNED GENERATED ALWAYS AS (IF(clock_out IS NULL, user_id, NULL)) STORED,
+    CONSTRAINT uq_attendance_open UNIQUE (open_user_id),
+    CONSTRAINT chk_attendance_times CHECK (clock_out IS NULL OR clock_out > clock_in),
+    CONSTRAINT fk_att_venue FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_att_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_att_assignment FOREIGN KEY (assignment_id) REFERENCES shift_assignments(id) ON DELETE SET NULL,
+    CONSTRAINT fk_att_updater FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_att_user_time (user_id, clock_in),
+    INDEX idx_att_venue_time (venue_id, clock_in)
 ) ENGINE=InnoDB;

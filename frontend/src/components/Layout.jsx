@@ -62,12 +62,14 @@ const MENU = [
     { to: '/don-hom-nay', label: 'Đơn trong ngày', icon: 'list', any: ['booking.view_venue'] },
     { to: '/doanh-thu-ca', label: 'Doanh thu ca', icon: 'clock', any: ['report.shift'] },
     { to: '/hoa-don-co-so', label: 'Hóa đơn', icon: 'invoice', any: ['invoice.view_venue'] },
+    { to: '/cham-cong', label: 'Chấm công', icon: 'punch', any: ['attendance.self'], hideForAdmin: true },
   ]],
   ['Vận hành', [
     { to: '/quan-ly/tong-quan', label: 'Tổng quan', icon: 'chart', any: ['report.revenue'] },
     { to: '/quan-ly/san', label: 'Sân & bảng giá', icon: 'court', any: ['court.manage', 'price.manage'] },
     { to: '/quan-ly/dich-vu', label: 'Dịch vụ', icon: 'drink', any: ['service.manage'] },
     { to: '/quan-ly/hoan-tien', label: 'Hoàn tiền', icon: 'refund', any: ['booking.refund'] },
+    { to: '/ca-lam', label: 'Ca làm & chấm công', icon: 'calendar', any: ['shift.manage'] },
     { to: '/chieu-sang', label: 'Chiếu sáng thông minh', icon: 'bulb', any: ['lighting.view'] },
   ]],
   ['Tài chính', [

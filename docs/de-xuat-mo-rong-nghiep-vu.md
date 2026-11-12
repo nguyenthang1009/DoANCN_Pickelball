@@ -1,6 +1,6 @@
 # Đề xuất mở rộng nghiệp vụ và hoàn thiện giao diện
 
-Tài liệu này gồm ba phần: khoảng cách giữa giao diện hiện tại và đặc tả UI/UX, các phân hệ nên bổ sung để hệ thống tiến gần một ERP thu nhỏ cho chuỗi sân Pickleball, và thứ tự triển khai đề xuất. Đã làm xong: trang chủ giới thiệu, Đợt 1, hóa đơn và VAT, sổ cái kế toán kép, tiền lương theo chấm công nhập tay, quản lý ảnh. Đã làm thêm chiếu sáng thông minh bằng Fuzzy Logic (xem [fuzzy-lighting.md](fuzzy-lighting.md)). Chưa làm: kho và cho thuê, chấm công bằng QR, xếp ca, sổ chi phí, AI agent, dự báo.
+Tài liệu này gồm ba phần: khoảng cách giữa giao diện hiện tại và đặc tả UI/UX, các phân hệ nên bổ sung để hệ thống tiến gần một ERP thu nhỏ cho chuỗi sân Pickleball, và thứ tự triển khai đề xuất. Đã làm xong: trang chủ giới thiệu, Đợt 1, hóa đơn và VAT, sổ cái kế toán kép, tiền lương theo 4 hình thức (tháng, ngày, giờ, ca), xếp ca và chấm công vào ra ca, quản lý ảnh. Đã làm thêm chiếu sáng thông minh bằng Fuzzy Logic (xem [fuzzy-lighting.md](fuzzy-lighting.md)). Chưa làm: kho và cho thuê, sổ chi phí, AI agent, dự báo.
 
 Hệ thống hiện có sẵn nền tốt để mở rộng: 13 bảng CSDL, `system_configs` cho tham số, `audit_logs` cho nhật ký, phân quyền theo cơ sở (BR15).
 
@@ -64,7 +64,7 @@ Bảng `payroll_parameters` (mã tham số, vùng, giá trị, ngày hiệu lự
 | Trần lương đóng BHTN | 20 lần lương tối thiểu vùng | Luật Việc làm 74/2025/QH15, từ 01/01/2026. Khác trần BHXH |
 | Giảm trừ gia cảnh | Bản thân 15.500.000đ, người phụ thuộc 6.200.000đ/tháng | Nghị quyết 110/2025/UBTVQH15. Chỉ dùng khi bật khấu trừ thuế TNCN |
 | Thuế TNCN lũy tiến | 5 bậc: 5%, 10%, 20%, 30%, 35%; ngưỡng tháng 10, 30, 60, 100 triệu | Luật Thuế TNCN 109/2025/QH15. Theo góp ý của giảng viên, đồ án tạm chưa khấu trừ: tham số `PIT_WITHHOLDING` = 0, Admin bật lại được |
-| Làm thêm giờ, làm đêm | 150%, 200%, 300%; ban đêm thêm 30% | Điều 98 Bộ luật Lao động 2019, Điều 55, 56 Nghị định 145/2020/NĐ-CP. Chưa tính khoản thêm 20% khi làm thêm vào ban đêm (Điều 57), sẽ làm cùng chấm công theo ca |
+| Làm thêm giờ, làm đêm | 150%, 200%, 300%; ban đêm thêm 30% | Điều 98 Bộ luật Lao động 2019, Điều 55, 56 Nghị định 145/2020/NĐ-CP. Làm thêm ban đêm thêm 20% lương giờ ban ngày (Điều 57): 200%, 210%, 270%, 390%. Tách từ giờ vào ra ca thực tế |
 
 Quy trình: chốt công, tính lương nháp, Manager rà soát, Admin duyệt và khóa kỳ, phát phiếu lương. Kỳ đã khóa không sửa được, chỉ tạo điều chỉnh ở kỳ sau.
 
