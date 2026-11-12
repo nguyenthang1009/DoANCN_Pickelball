@@ -100,6 +100,7 @@ function PayslipDetail({ slip, onClose }) {
           </div>
         ))}
       </dl>
+      {slip.otWarnings?.length > 0 && <div className="mt-3"><Alert kind="warning">Vượt giới hạn làm thêm (Điều 107 BLLĐ 2019): {slip.otWarnings.join('; ')}.</Alert></div>}
       {!slip.pitWithholding && <p className="mt-3 text-xs text-slate-600">Kỳ lương này chưa khấu trừ thuế TNCN.</p>}
       <p className="mt-3 text-xs text-slate-600">
         Làm thêm 150% ngày thường, 200% ngày nghỉ, 300% ngày lễ. Ban đêm (22h-6h) thêm 30%; làm thêm ban đêm thêm 20% lương giờ ban ngày (Điều 98 BLLĐ 2019, Điều 57 Nghị định 145/2020).
@@ -145,7 +146,8 @@ function PeriodView({ id, onChanged }) {
   if (!period) return <Spinner />;
   const t = period.totals;
   const [tone, label] = STATUS[period.status];
-  const details = [['Tổng thu nhập', vnd(t.gross)], ['Thực trả', vnd(t.net)], ...(period.pitWithholding ? [['Thuế TNCN', vnd(t.pit)]] : []), ['Bảo hiểm DN đóng', vnd(t.employerInsurance)]];
+  const overLimit = period.slips.filter((s) => s.otWarnings?.length);
+  const details = [['Tổng thu nhập', vnd(t.gross)], ['Thực trả', vnd(t.net)], ...(period.pitWithholding ? [['Thuế TNCN', vnd(t.pit)]] : []), ['Bảo hiểm DN đóng', vnd(t.employerInsurance)], ...(overLimit.length ? [['Vượt giờ làm thêm', `${overLimit.length} người`]] : [])];
   const columns = ['Nhân sự', 'Công', 'Tổng thu nhập', 'Bảo hiểm', ...(period.pitWithholding ? ['Thuế TNCN'] : []), 'Thực nhận', ''];
   return (
     <div className="flex flex-col gap-4">
@@ -161,6 +163,7 @@ function PeriodView({ id, onChanged }) {
           )}
         </div>
       </div>
+      {overLimit.length > 0 && <Alert kind="warning">{overLimit.map((s) => s.fullName).join(', ')} vượt giới hạn làm thêm theo Điều 107 BLLĐ 2019. Vẫn phải trả đủ tiền làm thêm; cần điều chỉnh lịch ca các tháng sau.</Alert>}
       {period.status === 'DRAFT' && period.createdBy === user.id && can('payroll.approve') && <Alert kind="warning">Bạn là người lập bảng lương này nên không tự duyệt được. Cần một người khác có quyền duyệt.</Alert>}
       <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
         <StatCard label="Tổng thu nhập" value={t.gross} format={vnd} icon="salary" tone="teal" />
@@ -177,7 +180,7 @@ function PeriodView({ id, onChanged }) {
             <tbody>
               {period.slips.map((s) => (
                 <tr key={s.id} className="border-t border-slate-200">
-                  <td className="px-4 py-3 font-semibold">{s.fullName}<div className="text-xs font-normal text-slate-600">{s.position} · {PAY_TYPES[s.payType]?.label}</div></td>
+                  <td className="px-4 py-3 font-semibold">{s.fullName}<div className="text-xs font-normal text-slate-600">{s.position} · {PAY_TYPES[s.payType]?.label}</div>{s.otWarnings?.length > 0 && <span className="mt-1 inline-block"><Badge tone="amber">Vượt giờ làm thêm</Badge></span>}</td>
                   <td className="px-4 py-3 text-right">{workText(s)}<div className="text-xs text-slate-600">{s.source === 'ATTENDANCE' ? 'Theo chấm công' : 'Nhập tay'}</div></td>
                   <td className="px-4 py-3 text-right">{vnd(s.grossPay)}</td>
                   <td className="px-4 py-3 text-right">{vnd(s.siEmployee + s.hiEmployee + s.uiEmployee)}</td>

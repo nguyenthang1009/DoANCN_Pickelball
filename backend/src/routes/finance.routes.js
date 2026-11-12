@@ -2,6 +2,7 @@ const { Router } = require('express');
 const finance = require('../controllers/finance.controller');
 const payroll = require('../services/payroll.service');
 const site = require('../services/site.service');
+const forecasting = require('../services/forecast.service');
 const { verifyToken, can } = require('../middlewares/auth.middleware');
 
 const send = (fn) => async (req, res) => res.json(await fn(req));
@@ -18,6 +19,7 @@ reports.get('/overview', can('finance.view'), finance.overview);
 reports.get('/trial-balance', can('finance.view'), finance.trialBalance);
 reports.get('/vat', can('finance.view'), finance.vat);
 reports.get('/reconciliation', can('finance.reconcile'), finance.reconciliation);
+reports.get('/forecast', can('forecast.view'), send((req) => forecasting.forecast(req.user, req.query)));
 reports.get('/legal-parameters', can('legal.manage', 'payroll.manage'), finance.legalList);
 reports.post('/legal-parameters', can('legal.manage'), finance.legalAdd);
 

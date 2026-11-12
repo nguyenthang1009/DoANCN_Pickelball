@@ -123,6 +123,10 @@ Hóa đơn hiện là chứng từ nội bộ, chưa phải hóa đơn điện t
 
 Admin thay ảnh hệ thống, chọn điểm lấy nét khi cắt ảnh theo khổ màn hình và sửa thông tin đồ án ở mục Ảnh & nội dung. Ảnh tải lên nằm ở `backend/uploads/` (không commit).
 
+## Dự báo doanh thu
+
+Dành cho Admin: dự báo doanh thu từng ngày và tăng trưởng 30 ngày tới bằng Holt-Winters theo mùa vụ tuần. Chọn mô hình bằng sai số trên các ngày cuối, kèm khoảng dự báo 80% và 95%. Doanh thu đọc từ sổ cái nên khớp báo cáo tài chính. Phương pháp, công thức, tài liệu tham khảo và kết quả đối chiếu với statsmodels: [docs/du-bao-doanh-thu.md](docs/du-bao-doanh-thu.md).
+
 ## Ca làm và chấm công
 
 - **Xếp ca:** mẫu ca theo cơ sở (sáng, chiều, đêm trực), lịch tuần cho từng nhân sự, chặn xếp trùng giờ. Ca chốt giờ lúc xếp nên sửa mẫu ca không đổi lịch cũ.
@@ -131,6 +135,7 @@ Admin thay ảnh hệ thống, chọn điểm lấy nét khi cắt ảnh theo kh
 - **Sửa chấm công:** quản lý ghi bù, sửa giờ, bắt buộc ghi lý do, có nhật ký. Không tự sửa chấm công của mình, không sửa tháng đã duyệt lương.
 - **Bảng công:** tổng hợp từng ngày theo luật: tối đa 8 giờ thường một ngày, phần vượt là làm thêm; ngày nghỉ hằng tuần và ngày lễ là làm thêm; ban đêm 22h-6h; lễ trùng ngày nghỉ hằng tuần thì nghỉ bù ngày kế tiếp. Nút "Tính lại từ chấm công" trên bảng lương đổ thẳng số giờ vào phiếu lương.
 - **Ngày lễ:** Admin nhập theo từng năm (đã có 12 ngày của 2026, gồm 24/11 Ngày Văn hóa Việt Nam).
+- **Giới hạn làm thêm:** bảng lương cảnh báo khi một ngày làm thêm quá 50% giờ làm bình thường, quá 40 giờ một tháng hoặc 200 giờ một năm (Điều 107 BLLĐ 2019). Chỉ cảnh báo, tiền làm thêm vẫn trả đủ.
 
 ## Chiếu sáng thông minh
 
@@ -185,6 +190,7 @@ DB_NAME=pickleball_booking node scripts/security-test.js http://localhost:3000/a
 DB_NAME=pickleball_booking node scripts/finance-test.js http://localhost:3000/api
 DB_NAME=pickleball_booking IOT_DEVICE_KEY=<khóa> node scripts/lighting-test.js http://localhost:3000/api
 DB_NAME=pickleball_booking node scripts/shift-test.js http://localhost:3000/api
+DB_NAME=pickleball_booking node scripts/forecast-test.js http://localhost:3000/api
 ```
 
 Các collection và script tạo thêm dữ liệu thử mỗi lần chạy (`payment-test.js` còn sửa trực tiếp hạn giữ chỗ), nên chạy trên CSDL vừa khởi tạo lại.

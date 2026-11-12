@@ -187,9 +187,35 @@ Lỗi phát hiện và đã sửa:
 | Admin không cấp được quyền tự chấm công cho vai trò khác vì chính Admin không có quyền này | `security-test.js` | Cấp quyền cho Admin, ẩn mục Chấm công với Admin vì Admin không thuộc cơ sở nào |
 | Trang Chấm công tràn ngang trên điện thoại do bảng chấm công kéo rộng cột lưới | Xem giao diện thật ở 375 px | Cột lưới dùng `minmax(0, 1fr)` |
 
-Chưa làm: tiền lương ngày lễ cho người làm theo giờ, theo ca (luật chưa có công thức chung, cần thỏa thuận trong hợp đồng); chưa cảnh báo khi vượt giới hạn làm thêm 40 giờ một tháng, 200 giờ một năm (Điều 107 BLLĐ 2019).
+Thêm 5 kiểm tra cảnh báo giới hạn làm thêm (Điều 107 BLLĐ 2019): 7 ngày làm 6h-20h thì cảnh báo 7 ngày quá 4 giờ và 42 giờ trong tháng quá 40 giờ; cộng dồn năm 50 giờ chưa quá 200 giờ; tiền làm thêm vẫn trả đủ. Tổng 83 kiểm tra.
 
-## 9. Chưa kiểm thử được
+Chưa làm: tiền lương ngày lễ cho người làm theo giờ, theo ca (luật chưa có công thức chung, cần thỏa thuận trong hợp đồng).
+
+## 9. Dự báo doanh thu
+
+Ngày chạy: 12/11/2026. `scripts/forecast-test.js` gồm 30 kiểm tra; đối chiếu statsmodels chạy riêng.
+
+| Phạm vi | Kết quả |
+| --- | --- |
+| Chuỗi lặp theo tuần: giá trị khớp và dự báo 21 ngày trùng giá trị thật | Đạt |
+| Chuỗi có xu hướng: sau 10 tuần dự báo lệch dưới 1%; xu hướng giảm dần đúng công thức | Đạt |
+| Doanh thu không đổi: dự báo giữ nguyên, khoảng dự báo bằng 0; dưới 4 tuần thì không dự báo | Đạt |
+| MAE, RMSE, MAPE, MASE, naive theo mùa với số tính tay | Đạt |
+| Chuỗi có xu hướng và mùa vụ: Holt-Winters thắng naive theo mùa | Đạt |
+| Độ phủ khoảng 80% trên 280 ngày kiểm tra nằm trong 70-90% | Đạt |
+| Chỉ Admin xem được; số ngày dự báo ngoài 7-90 bị từ chối | Đạt |
+| Đọc 56 ngày doanh thu từ sổ cái, tổng 30 ngày khớp sổ cái, lọc theo cơ sở | Đạt |
+| Đối chiếu ETSModel (statsmodels 0.15.0), 3 bộ tham số | Lệch 0,000000đ |
+| Giao diện ở 1280 px và 375 px | Đạt khi thử thật |
+
+Lỗi phát hiện và đã sửa:
+
+| Lỗi | Phát hiện bởi | Cách sửa |
+| --- | --- | --- |
+| Lớp ExponentialSmoothing của statsmodels lệch ở ngày dự báo thứ 7, 14, 21, 28 | Đối chiếu statsmodels | Không phải lỗi của hệ thống: thư viện lấy mùa vụ chu kỳ trước. Đối chiếu thêm với ETSModel theo đúng công thức FPP3 thì trùng khớp, dùng ETSModel làm mốc |
+| Bảng đánh giá mô hình xuống dòng giữa số và đơn vị | Xem giao diện thật | Giữ số trên một dòng |
+
+## 10. Chưa kiểm thử được
 
 - **PayOS thật**: chưa có `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`. Cách ký chữ ký làm theo SDK chính thức của payOS; cần chạy thử với tài khoản PayOS sandbox trước khi demo.
 - **Quét QR bằng camera**: trình duyệt kiểm thử không có camera; đã kiểm luồng nhập mã tay và API quét QR (`/checkin/lookup` với chuỗi QR).

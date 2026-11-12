@@ -177,6 +177,17 @@ async function testApi() {
   expectError('Đã duyệt thì chấm công tháng 10 bị khóa', await add({ userId: 3, clockIn: '2026-10-20 06:00', clockOut: '2026-10-20 10:00', note: 'x' }), 409, 'PAYROLL_LOCKED');
   expectError('Đã duyệt thì không tính lại được', await call(`/payroll/periods/${period.id}/sync-attendance`, { method: 'POST', token: manager }), 409, 'PAYROLL_LOCKED');
 
+  console.log('\n--- Cảnh báo vượt giới hạn làm thêm (Điều 107 BLLĐ 2019)');
+  same('Tháng 10 làm thêm 8 giờ: không cảnh báo', approved.data.period.slips.find((x) => x.userId === 3).otWarnings, []);
+  // 7 ngày thường tháng 11 làm 6h-20h: mỗi ngày 6 giờ làm thêm (quá 4 giờ), cả tháng 42 giờ (quá 40 giờ)
+  for (const d of ['02', '03', '04', '05', '06', '09', '10']) await add({ userId: 3, clockIn: `2026-11-${d} 06:00`, clockOut: `2026-11-${d} 20:00`, note: 'Tăng ca giải đấu' });
+  const nov = (await call('/payroll/periods', { method: 'POST', token: manager, body: { month: '2026-11', standardDays: 26 } })).data.period;
+  const over = nov.slips.find((x) => x.userId === 3);
+  check('Cảnh báo 7 ngày làm thêm quá 4 giờ', over.otWarnings.some((w) => w.startsWith('7 ngày làm thêm quá 4 giờ')), JSON.stringify(over.otWarnings));
+  check('Cảnh báo tháng làm thêm 42 giờ, quá 40 giờ', over.otWarnings.some((w) => w.includes('42 giờ trong tháng')), JSON.stringify(over.otWarnings));
+  same('Chưa quá 200 giờ cả năm (8 + 42 = 50 giờ)', [over.otWarnings.length, over.otYearHours], [2, 50]);
+  same('Vẫn trả đủ 42 giờ làm thêm 150%', over.otPay, Math.round(42 * 30000 * 1.5));
+
   console.log('\n--- Ngày lễ');
   check('Quản lý xem được ngày lễ', (await call('/shifts/holidays?year=2026', { token: manager })).data.holidays.length === 12);
   expectError('Quản lý không thêm được ngày lễ', await call('/shifts/holidays', { method: 'POST', token: manager, body: { date: '2027-01-01', name: 'Tết Dương lịch', legalRef: 'x' } }), 403, 'FORBIDDEN');

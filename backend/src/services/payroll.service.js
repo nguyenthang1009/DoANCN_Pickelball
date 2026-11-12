@@ -113,11 +113,39 @@ async function getPeriodRow(id, db = pool, lock = false) {
   return rows[0];
 }
 
+// Cảnh báo vượt giới hạn làm thêm (Điều 107 Bộ luật Lao động 2019): theo ngày, theo tháng, cộng dồn cả năm.
+// Chỉ cảnh báo, không chặn: số giờ là việc đã xảy ra, bảng lương vẫn phải trả đủ.
+async function overtimeWarnings(row, slips) {
+  const end = monthEnd(row.period_month);
+  const [daily, monthly, yearly, normal] = await Promise.all(['OT_DAILY_LIMIT_PERCENT', 'OT_MONTHLY_LIMIT_HOURS', 'OT_YEARLY_LIMIT_HOURS', 'NORMAL_DAILY_HOURS'].map((c) => legal.valueOn(c, end)));
+  const [years] = await pool.query(
+    `SELECT s.user_id, SUM(s.ot_weekday_minutes + s.ot_weekend_minutes + s.ot_holiday_minutes) AS minutes
+       FROM payslips s JOIN payroll_periods p ON p.id = s.period_id
+      WHERE p.period_month BETWEEN ? AND ? GROUP BY s.user_id`,
+    [`${row.period_month.slice(0, 4)}-01`, row.period_month],
+  );
+  const yearOf = new Map(years.map((y) => [y.user_id, Number(y.minutes)]));
+  const hoursText = (m) => (m / 60).toLocaleString('vi-VN', { maximumFractionDigits: 1 });
+  for (const s of slips) {
+    const month = s.otWeekdayMinutes + s.otWeekendMinutes + s.otHolidayMinutes;
+    const year = yearOf.get(s.userId) ?? month;
+    const dayLimit = (normal * 60 * daily) / 100;
+    const longDays = (s.timesheet?.days ?? []).filter((d) => d.type === 'WORK' && d.ot > dayLimit);
+    s.otWarnings = [
+      ...(longDays.length ? [`${longDays.length} ngày làm thêm quá ${hoursText(dayLimit)} giờ (${daily}% giờ làm bình thường)`] : []),
+      ...(month > monthly * 60 ? [`Làm thêm ${hoursText(month)} giờ trong tháng, quá ${monthly} giờ`] : []),
+      ...(year > yearly * 60 ? [`Làm thêm ${hoursText(year)} giờ từ đầu năm, quá ${yearly} giờ`] : []),
+    ];
+    s.otYearHours = Math.round((year / 60) * 10) / 10;
+  }
+  return slips;
+}
+
 async function getPeriod(id, user) {
   const row = await getPeriodRow(id);
   assertVenue(user, row.venue_id);
   const [slips] = await pool.query(`${SLIP_SELECT} WHERE s.period_id = ? ORDER BY s.id`, [id]);
-  return toPeriod(row, slips.map(toSlip));
+  return toPeriod(row, await overtimeWarnings(row, slips.map(toSlip)));
 }
 
 async function listPeriods(user, venueId) {

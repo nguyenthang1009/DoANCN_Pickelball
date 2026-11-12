@@ -74,6 +74,7 @@ const MENU = [
   ]],
   ['Tài chính', [
     { to: '/tai-chinh', label: 'Tài chính & thuế', icon: 'finance', any: ['finance.view'] },
+    { to: '/du-bao', label: 'Dự báo doanh thu', icon: 'chart', any: ['forecast.view'] },
     { to: '/tien-luong', label: 'Tiền lương', icon: 'salary', any: ['payroll.manage', 'payroll.approve'] },
     { to: '/phieu-luong', label: 'Phiếu lương của tôi', icon: 'wallet', any: ['payroll.view_own'], hideForAdmin: true },
   ]],

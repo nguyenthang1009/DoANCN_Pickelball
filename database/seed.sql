@@ -235,7 +235,10 @@ INSERT INTO legal_parameters (code, label, value, unit, effective_from, effectiv
 ('MIN_HOURLY_WAGE_REGION_3', 'Lương tối thiểu giờ vùng III', 20000, 'VND', '2026-01-01', NULL, 'Nghị định 293/2025/NĐ-CP'),
 ('MIN_HOURLY_WAGE_REGION_4', 'Lương tối thiểu giờ vùng IV', 17800, 'VND', '2026-01-01', NULL, 'Nghị định 293/2025/NĐ-CP'),
 ('NIGHT_OT_EXTRA_RATE', 'Làm thêm ban đêm: trả thêm trên lương giờ ban ngày', 2000, 'BP', '2021-01-01', NULL, 'Khoản 3 Điều 98 Bộ luật Lao động 2019, Điều 57 Nghị định 145/2020/NĐ-CP: thêm 20%'),
-('NORMAL_DAILY_HOURS', 'Giờ làm việc bình thường tối đa một ngày', 8, 'NUMBER', '2021-01-01', NULL, 'Khoản 1 Điều 105 Bộ luật Lao động 2019: không quá 8 giờ một ngày');
+('NORMAL_DAILY_HOURS', 'Giờ làm việc bình thường tối đa một ngày', 8, 'NUMBER', '2021-01-01', NULL, 'Khoản 1 Điều 105 Bộ luật Lao động 2019: không quá 8 giờ một ngày'),
+('OT_DAILY_LIMIT_PERCENT', 'Giờ làm thêm tối đa một ngày, % giờ làm bình thường', 50, 'NUMBER', '2021-01-01', NULL, 'Điểm b khoản 2 Điều 107 Bộ luật Lao động 2019'),
+('OT_MONTHLY_LIMIT_HOURS', 'Giờ làm thêm tối đa một tháng', 40, 'NUMBER', '2021-01-01', NULL, 'Điểm b khoản 2 Điều 107 Bộ luật Lao động 2019'),
+('OT_YEARLY_LIMIT_HOURS', 'Giờ làm thêm tối đa một năm', 200, 'NUMBER', '2021-01-01', NULL, 'Điểm c khoản 2 Điều 107 Bộ luật Lao động 2019 (một số ngành được 300 giờ theo khoản 3)');
 
 INSERT INTO public_holidays (holiday_date, name, legal_ref) VALUES
 ('2026-01-01', 'Tết Dương lịch', 'Điểm a khoản 1 Điều 112 Bộ luật Lao động 2019'),
@@ -254,3 +257,8 @@ INSERT INTO public_holidays (holiday_date, name, legal_ref) VALUES
 INSERT INTO shift_templates (venue_id, name, start_time, end_time) VALUES
 (1, 'Ca sáng', '06:00:00', '14:00:00'), (1, 'Ca chiều', '14:00:00', '22:00:00'), (1, 'Ca đêm trực', '22:00:00', '06:00:00'),
 (2, 'Ca sáng', '06:00:00', '14:00:00'), (2, 'Ca chiều', '14:00:00', '22:00:00'), (2, 'Ca đêm trực', '22:00:00', '06:00:00');
+
+-- 16. Dự báo doanh thu cho Admin (Holt-Winters, xem docs/du-bao-doanh-thu.md)
+INSERT INTO permissions (code, module, description, admin_only, sort_order) VALUES
+('forecast.view', 'Báo cáo', 'Xem dự báo doanh thu và tăng trưởng', 1, 44);
+INSERT INTO role_permissions (role_id, permission_code) VALUES (1, 'forecast.view');

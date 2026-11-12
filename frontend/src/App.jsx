@@ -34,6 +34,7 @@ const Finance = lazy(() => import('./pages/finance/Finance'));
 const Payroll = lazy(() => import('./pages/finance/Payroll'));
 const Lighting = lazy(() => import('./pages/manager/Lighting'));
 const ShiftPlanner = lazy(() => import('./pages/manager/ShiftPlanner'));
+const Forecast = lazy(() => import('./pages/finance/Forecast'));
 const MyAttendance = lazy(() => import('./pages/staff/MyAttendance'));
 
 // Phân quyền giao diện theo mã chức năng; backend vẫn kiểm tra lại mọi API
@@ -75,6 +76,7 @@ export default function App() {
         <Route path="/tai-chinh" element={guard(['finance.view'], <Finance />)} />
         <Route path="/chieu-sang" element={guard(['lighting.view'], <Lighting />)} />
         <Route path="/ca-lam" element={guard(['shift.manage'], <ShiftPlanner />)} />
+        <Route path="/du-bao" element={guard(['forecast.view'], <Forecast />)} />
         <Route path="/cham-cong" element={guard(['attendance.self'], <MyAttendance />)} />
         <Route path="/tien-luong" element={guard(['payroll.manage', 'payroll.approve'], <Payroll />)} />
         <Route path="/phieu-luong" element={guard(['payroll.view_own'], <MyPayslips />)} />
