@@ -1,13 +1,20 @@
 require('dotenv').config({ quiet: true });
+const crypto = require('crypto');
 
+// Khóa ký phiên đăng nhập: ai biết khóa này là tự tạo được phiên Admin. Repo công khai nên chặn chuỗi mẫu và chuỗi ngắn.
+const JWT_SAMPLE = 'doi-chuoi-nay-thanh-chuoi-ngau-nhien-dai';
+const GENERATE_HINT = 'Tạo khóa bằng lệnh: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))" rồi dán vào backend/.env';
 if (!process.env.JWT_SECRET) {
-  throw new Error('Thiếu biến môi trường JWT_SECRET (xem backend/.env.example)');
+  throw new Error(`Thiếu JWT_SECRET trong backend/.env. ${GENERATE_HINT}`);
+}
+if (process.env.JWT_SECRET === JWT_SAMPLE || process.env.JWT_SECRET.length < 32) {
+  throw new Error(`JWT_SECRET phải là chuỗi ngẫu nhiên từ 32 ký tự, không dùng chuỗi mẫu. ${GENERATE_HINT}`);
 }
 
 const isProduction = process.env.NODE_ENV === 'production';
 const listOf = (value) => value.split(',').map((s) => s.trim()).filter(Boolean);
 
-module.exports = {
+const config = {
   isProduction,
   port: Number(process.env.PORT) || 3000,
   // Chỉ các địa chỉ frontend này được gọi API kèm cookie đăng nhập
@@ -42,9 +49,17 @@ module.exports = {
   payos: {
     clientId: process.env.PAYOS_CLIENT_ID || '',
     apiKey: process.env.PAYOS_API_KEY || '',
-    checksumKey: process.env.PAYOS_CHECKSUM_KEY || 'mock-checksum-key-chi-dung-khi-dev',
+    // Chế độ mock không có khóa thật: sinh khóa ngẫu nhiên mỗi lần chạy để không ai giả được webhook từ bên ngoài
+    checksumKey: process.env.PAYOS_CHECKSUM_KEY || crypto.randomBytes(32).toString('hex'),
     baseUrl: process.env.PAYOS_BASE_URL || 'https://api-merchant.payos.vn',
     returnUrl: process.env.PAYOS_RETURN_URL || 'http://localhost:5173',
     get mode() { return this.clientId && this.apiKey && process.env.PAYOS_CHECKSUM_KEY ? 'payos' : 'mock'; },
   },
 };
+
+// Chế độ mock cho mọi tài khoản bấm "đã thanh toán", chỉ dùng khi phát triển và trình diễn
+if (isProduction && config.payos.mode === 'mock') {
+  throw new Error('NODE_ENV=production cần đủ PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY; chế độ giả lập thanh toán chỉ dùng khi phát triển');
+}
+
+module.exports = config;

@@ -3,6 +3,8 @@
 
 Gồm backend Node.js + Express (MVC, MySQL, Socket.io) và frontend React (Vite) + Tailwind theo design system "Court" trên Figma. Báo cáo kiểm thử: [docs/test-report.md](docs/test-report.md).
 
+**Tải về chạy thử lần đầu:** làm theo [docs/huong-dan-cai-dat.md](docs/huong-dan-cai-dat.md) (từng bước, có tài khoản mẫu, kịch bản chạy thử và cách xử lý lỗi thường gặp).
+
 ## Khởi tạo CSDL (MySQL 8.0 trên Laragon)
 
 Bật MySQL trong Laragon rồi chạy từ thư mục gốc của repo. Script xóa và tạo lại database `pickleball_booking`. Cần chạy lại khi schema đổi (mới nhất: thêm bảng phân quyền và `refresh_tokens`).
@@ -20,7 +22,8 @@ Tài khoản mẫu (mật khẩu `12345678`): `admin@pickleball.vn`, `manager.q7
 ```bash
 cd backend
 npm install
-cp .env.example .env   # sửa JWT_SECRET và thông tin MySQL nếu cần
+cp .env.example .env   # bắt buộc điền JWT_SECRET (từ 32 ký tự) và thông tin MySQL nếu cần
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"   # tạo JWT_SECRET
 npm run dev
 ```
 
@@ -185,12 +188,12 @@ Kịch bản tranh chấp (nhiều khách cùng đặt một ô), thanh toán �
 ```bash
 cd backend
 node scripts/race-test.js http://localhost:3000/api 20
-DB_NAME=pickleball_booking node scripts/payment-test.js http://localhost:3000/api
+DB_NAME=pickleball_booking PAYOS_CHECKSUM_KEY=<giống server> node scripts/payment-test.js http://localhost:3000/api
 DB_NAME=pickleball_booking node scripts/security-test.js http://localhost:3000/api
-DB_NAME=pickleball_booking node scripts/finance-test.js http://localhost:3000/api
+DB_NAME=pickleball_booking PAYOS_CHECKSUM_KEY=<giống server> node scripts/finance-test.js http://localhost:3000/api
 DB_NAME=pickleball_booking IOT_DEVICE_KEY=<khóa> node scripts/lighting-test.js http://localhost:3000/api
 DB_NAME=pickleball_booking node scripts/shift-test.js http://localhost:3000/api
 DB_NAME=pickleball_booking node scripts/forecast-test.js http://localhost:3000/api
 ```
 
-Các collection và script tạo thêm dữ liệu thử mỗi lần chạy (`payment-test.js` còn sửa trực tiếp hạn giữ chỗ), nên chạy trên CSDL vừa khởi tạo lại.
+Các collection và script tạo thêm dữ liệu thử mỗi lần chạy (`payment-test.js` còn sửa trực tiếp hạn giữ chỗ), nên chạy trên CSDL vừa khởi tạo lại. `payment-test.js` và `finance-test.js` tự ký webhook PayOS nên server cần chạy với cùng `PAYOS_CHECKSUM_KEY` (ví dụ `PAYOS_CHECKSUM_KEY=khoa-thu npm run dev`); khi không đặt, server tự sinh khóa ngẫu nhiên và từ chối mọi webhook từ bên ngoài.

@@ -9,7 +9,9 @@ const { splitVat } = require('../src/services/invoice.service');
 
 const BASE = process.argv[2] || 'http://localhost:3000/api';
 const ORIGIN = BASE.replace(/\/api$/, '');
-const CHECKSUM = process.env.PAYOS_CHECKSUM_KEY || 'mock-checksum-key-chi-dung-khi-dev';
+// Server thử phải chạy với cùng PAYOS_CHECKSUM_KEY để test ký được webhook giống PayOS
+const CHECKSUM = process.env.PAYOS_CHECKSUM_KEY;
+if (!CHECKSUM) { console.error('Cần đặt PAYOS_CHECKSUM_KEY giống server đang chạy, VD: PAYOS_CHECKSUM_KEY=khoa-thu'); process.exit(1); }
 let passed = 0;
 let failed = 0;
 
