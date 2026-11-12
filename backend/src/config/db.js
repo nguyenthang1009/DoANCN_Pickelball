@@ -8,6 +8,7 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   timezone: '+07:00',
   charset: 'utf8mb4',
+  dateStrings: ['DATE'], // ngày chơi giữ dạng 'YYYY-MM-DD', không bị lệch múi giờ khi đổi sang Date
 });
 
 module.exports = pool;

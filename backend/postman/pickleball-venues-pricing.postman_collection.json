@@ -1,0 +1,1472 @@
+{
+  "info": {
+    "name": "Pickleball Booking – Tuần 5 Cơ sở, Sân & Bảng giá",
+    "description": "Kiểm thử API cụm sân, sân con, bảng giá động, báo giá và danh mục dịch vụ. Nên chạy trên CSDL vừa khởi tạo bằng scripts/init-db.sh. Collection tạo thêm 1 cơ sở và 1 món dịch vụ (đã ngừng bán) mỗi lần chạy; bảng giá Sân 01 và trạng thái Sân 02 được trả về như cũ ở cuối mỗi nhóm.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api"
+    },
+    {
+      "key": "seedPassword",
+      "value": "12345678"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "if (!pm.collectionVariables.get('suffix')) pm.collectionVariables.set('suffix', String(Date.now()).slice(-6));"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Đăng nhập",
+      "item": [
+        {
+          "name": "Admin đăng nhập",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"identifier\": \"admin@pickleball.vn\", \"password\": \"{{seedPassword}}\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('adminToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager Q7 đăng nhập",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"identifier\": \"manager.q7@pickleball.vn\", \"password\": \"{{seedPassword}}\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('managerToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff Q7 đăng nhập",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"identifier\": \"staff.q7@pickleball.vn\", \"password\": \"{{seedPassword}}\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('staffToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer đăng nhập",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"identifier\": \"customer1@gmail.com\", \"password\": \"{{seedPassword}}\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('customerToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Cụm sân (venues)",
+      "item": [
+        {
+          "name": "Khách xem danh sách cơ sở (công khai)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/venues",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 và có cơ sở Quận 7, Thủ Đức', () => { pm.response.to.have.status(200); const names = pm.response.json().venues.map(v => v.name); pm.expect(names).to.include('Cụm sân Pickleball Quận 7'); pm.expect(names).to.include('Cụm sân Pickleball Thủ Đức'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Xem chi tiết cơ sở 1",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/venues/1",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Giờ mở cửa dạng HH:MM', () => { const v = pm.response.json().venue; pm.expect(v.openTime).to.eql('06:00'); pm.expect(v.closeTime).to.eql('22:00'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cơ sở không tồn tại",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/venues/999",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('404 VENUE_NOT_FOUND', () => { pm.response.to.have.status(404); pm.expect(pm.response.json().error.code).to.eql('VENUE_NOT_FOUND'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager không được tạo cơ sở",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/venues",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"X\",\n  \"address\": \"Y\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 FORBIDDEN', () => { pm.response.to.have.status(403); pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Giờ mở cửa lệch 30 phút bị từ chối",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/venues",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Cơ sở lỗi\",\n  \"address\": \"Q2\",\n  \"openTime\": \"06:15\",\n  \"closeTime\": \"22:00\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 VALIDATION_ERROR', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin tạo cơ sở mới",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/venues",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"name\": \"Cụm sân Pickleball Quận 2 #{{suffix}}\", \"address\": \"12 Trần Não, TP. Thủ Đức\", \"openTime\": \"05:30\", \"closeTime\": \"23:00\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.test('Giờ mở cửa lưu đúng', () => pm.expect(pm.response.json().venue.openTime).to.eql('05:30'));",
+                  "pm.collectionVariables.set('newVenueId', pm.response.json().venue.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rút giờ đóng cửa làm hở bảng giá",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/venues/1",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"closeTime\": \"21:00\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('409 PRICE_RULES_MISMATCH', () => { pm.response.to.have.status(409); pm.expect(pm.response.json().error.code).to.eql('PRICE_RULES_MISMATCH'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Sân con (courts)",
+      "item": [
+        {
+          "name": "Khách xem sân của cơ sở 1",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/venues/1/courts",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 và có Sân 04 đang bảo trì', () => { pm.response.to.have.status(200); const c = pm.response.json().courts.find(x => x.name.startsWith('Sân 04')); pm.expect(c.status).to.eql('MAINTENANCE'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager Q7 thêm sân, chép giá từ Sân 03",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/venues/1/courts",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"name\": \"Sân thử #{{suffix}}\", \"courtType\": \"OUTDOOR\", \"copyPriceFrom\": 3 }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('newCourtId', pm.response.json().court.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Trùng tên sân trong cùng cơ sở",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/venues/1/courts",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"name\": \"Sân thử #{{suffix}}\", \"courtType\": \"INDOOR\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('409 DUPLICATE_COURT_NAME', () => { pm.response.to.have.status(409); pm.expect(pm.response.json().error.code).to.eql('DUPLICATE_COURT_NAME'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sân mới đã có đủ 4 khung giá",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/courts/{{newCourtId}}/price-rules",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('4 khung giá chép từ Sân 03', () => pm.expect(pm.response.json().rules.length).to.eql(4));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager Q7 thêm sân ở Thủ Đức",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/venues/2/courts",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sân lạ\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 FORBIDDEN', () => { pm.response.to.have.status(403); pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff không được thêm sân",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/venues/1/courts",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sân lạ\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 FORBIDDEN', () => { pm.response.to.have.status(403); pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager đổi tên sân mới",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/courts/{{newCourtId}}",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"name\": \"Sân thử #{{suffix}} (Mái che)\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('Tên mới', () => pm.expect(pm.response.json().court.name).to.include('Mái che'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager Q7 sửa sân Thủ Đức",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/courts/5",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Đổi tên\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 FORBIDDEN', () => { pm.response.to.have.status(403); pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Xóa sân chưa có lịch đặt",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/courts/{{newCourtId}}",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Bảng giá động (price rules)",
+      "item": [
+        {
+          "name": "Khách xem bảng giá Sân 01",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/courts/1/price-rules",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('4 khung, giá mỗi ô bằng nửa giá giờ', () => { const rules = pm.response.json().rules; pm.expect(rules.length).to.eql(4); rules.forEach(x => pm.expect(x.pricePerSlot).to.eql(x.pricePerHour / 2)); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bảng giá hở khung 16:00–17:00",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/courts/1/price-rules",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rules\": [\n    {\n      \"dayType\": \"WEEKDAY\",\n      \"startTime\": \"06:00\",\n      \"endTime\": \"16:00\",\n      \"pricePerHour\": 120000\n    },\n    {\n      \"dayType\": \"WEEKDAY\",\n      \"startTime\": \"17:00\",\n      \"endTime\": \"22:00\",\n      \"pricePerHour\": 180000\n    },\n    {\n      \"dayType\": \"WEEKEND\",\n      \"startTime\": \"06:00\",\n      \"endTime\": \"17:00\",\n      \"pricePerHour\": 150000\n    },\n    {\n      \"dayType\": \"WEEKEND\",\n      \"startTime\": \"17:00\",\n      \"endTime\": \"22:00\",\n      \"pricePerHour\": 220000\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 INVALID_PRICE_RULES', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('INVALID_PRICE_RULES'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bảng giá chồng lấn",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/courts/1/price-rules",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rules\": [\n    {\n      \"dayType\": \"WEEKDAY\",\n      \"startTime\": \"06:00\",\n      \"endTime\": \"18:00\",\n      \"pricePerHour\": 120000\n    },\n    {\n      \"dayType\": \"WEEKDAY\",\n      \"startTime\": \"17:00\",\n      \"endTime\": \"22:00\",\n      \"pricePerHour\": 180000\n    },\n    {\n      \"dayType\": \"WEEKEND\",\n      \"startTime\": \"06:00\",\n      \"endTime\": \"17:00\",\n      \"pricePerHour\": 150000\n    },\n    {\n      \"dayType\": \"WEEKEND\",\n      \"startTime\": \"17:00\",\n      \"endTime\": \"22:00\",\n      \"pricePerHour\": 220000\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 INVALID_PRICE_RULES', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('INVALID_PRICE_RULES'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Thiếu bảng giá cuối tuần",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/courts/1/price-rules",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rules\": [\n    {\n      \"dayType\": \"WEEKDAY\",\n      \"startTime\": \"06:00\",\n      \"endTime\": \"17:00\",\n      \"pricePerHour\": 120000\n    },\n    {\n      \"dayType\": \"WEEKDAY\",\n      \"startTime\": \"17:00\",\n      \"endTime\": \"22:00\",\n      \"pricePerHour\": 180000\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 INVALID_PRICE_RULES', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('INVALID_PRICE_RULES'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Giá lẻ không phải bội số 1.000",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/courts/1/price-rules",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rules\": [\n    {\n      \"dayType\": \"WEEKDAY\",\n      \"startTime\": \"06:00\",\n      \"endTime\": \"17:00\",\n      \"pricePerHour\": 120500\n    },\n    {\n      \"dayType\": \"WEEKDAY\",\n      \"startTime\": \"17:00\",\n      \"endTime\": \"22:00\",\n      \"pricePerHour\": 180000\n    },\n    {\n      \"dayType\": \"WEEKEND\",\n      \"startTime\": \"06:00\",\n      \"endTime\": \"17:00\",\n      \"pricePerHour\": 150000\n    },\n    {\n      \"dayType\": \"WEEKEND\",\n      \"startTime\": \"17:00\",\n      \"endTime\": \"22:00\",\n      \"pricePerHour\": 220000\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 VALIDATION_ERROR', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff không được sửa giá",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/courts/1/price-rules",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rules\": [\n    {\n      \"dayType\": \"WEEKDAY\",\n      \"startTime\": \"06:00\",\n      \"endTime\": \"17:00\",\n      \"pricePerHour\": 120000\n    },\n    {\n      \"dayType\": \"WEEKDAY\",\n      \"startTime\": \"17:00\",\n      \"endTime\": \"22:00\",\n      \"pricePerHour\": 180000\n    },\n    {\n      \"dayType\": \"WEEKEND\",\n      \"startTime\": \"06:00\",\n      \"endTime\": \"17:00\",\n      \"pricePerHour\": 150000\n    },\n    {\n      \"dayType\": \"WEEKEND\",\n      \"startTime\": \"17:00\",\n      \"endTime\": \"22:00\",\n      \"pricePerHour\": 220000\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 FORBIDDEN', () => { pm.response.to.have.status(403); pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager thêm khung sáng sớm 06:00–09:00",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/courts/1/price-rules",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rules\": [\n    {\n      \"dayType\": \"WEEKDAY\",\n      \"startTime\": \"06:00\",\n      \"endTime\": \"09:00\",\n      \"pricePerHour\": 140000\n    },\n    {\n      \"dayType\": \"WEEKDAY\",\n      \"startTime\": \"09:00\",\n      \"endTime\": \"17:00\",\n      \"pricePerHour\": 120000\n    },\n    {\n      \"dayType\": \"WEEKDAY\",\n      \"startTime\": \"17:00\",\n      \"endTime\": \"22:00\",\n      \"pricePerHour\": 180000\n    },\n    {\n      \"dayType\": \"WEEKEND\",\n      \"startTime\": \"06:00\",\n      \"endTime\": \"17:00\",\n      \"pricePerHour\": 150000\n    },\n    {\n      \"dayType\": \"WEEKEND\",\n      \"startTime\": \"17:00\",\n      \"endTime\": \"22:00\",\n      \"pricePerHour\": 220000\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('5 khung giá', () => pm.expect(pm.response.json().rules.length).to.eql(5));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Báo giá (quote)",
+      "item": [
+        {
+          "name": "Thứ Hai 18:00–19:30 giờ cao điểm",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/courts/1/quote?date=2026-11-02&start=18:00&end=19:30",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('WEEKDAY, 3 ô × 90.000 = 270.000', () => { const q = pm.response.json(); pm.expect(q.dayType).to.eql('WEEKDAY'); pm.expect(q.slots.length).to.eql(3); pm.expect(q.totalAmount).to.eql(270000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Thứ Hai 08:30–10:00 vắt qua hai khung giá",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/courts/1/quote?date=2026-11-02&start=08:30&end=10:00",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('70.000 + 60.000 + 60.000 = 190.000', () => { const q = pm.response.json(); pm.expect(q.slots.map(s => s.price)).to.eql([70000, 60000, 60000]); pm.expect(q.totalAmount).to.eql(190000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Thứ Bảy 17:00–18:00 giá cuối tuần",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/courts/1/quote?date=2026-11-07&start=17:00&end=18:00",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('WEEKEND, 220.000', () => { const q = pm.response.json(); pm.expect(q.dayType).to.eql('WEEKEND'); pm.expect(q.totalAmount).to.eql(220000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ngày lễ 01/01 (thứ Sáu) tính giá cuối tuần",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/courts/1/quote?date=2027-01-01&start=06:00&end=07:00",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('WEEKEND do ngày lễ, 150.000', () => { const q = pm.response.json(); pm.expect(q.dayType).to.eql('WEEKEND'); pm.expect(q.holiday).to.eql('Tết Dương lịch'); pm.expect(q.totalAmount).to.eql(150000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Đặt dưới 60 phút",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/courts/1/quote?date=2026-11-02&start=18:00&end=18:30",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 INVALID_DURATION', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('INVALID_DURATION'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Đặt quá 180 phút",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/courts/1/quote?date=2026-11-02&start=06:00&end=09:30",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 INVALID_DURATION', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('INVALID_DURATION'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Giờ lẻ 18:15",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/courts/1/quote?date=2026-11-02&start=18:15&end=19:15",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 VALIDATION_ERROR', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Vượt giờ đóng cửa",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/courts/1/quote?date=2026-11-02&start=21:00&end=22:30",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 OUTSIDE_OPENING_HOURS', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('OUTSIDE_OPENING_HOURS'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ngày sai định dạng",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/courts/1/quote?date=02-11-2026&start=18:00&end=19:00",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 VALIDATION_ERROR', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sân 04 đang bảo trì không báo giá",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/courts/4/quote?date=2026-11-02&start=18:00&end=19:00",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('409 COURT_UNAVAILABLE', () => { pm.response.to.have.status(409); pm.expect(pm.response.json().error.code).to.eql('COURT_UNAVAILABLE'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Khôi phục bảng giá gốc Sân 01",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/courts/1/price-rules",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rules\": [\n    {\n      \"dayType\": \"WEEKDAY\",\n      \"startTime\": \"06:00\",\n      \"endTime\": \"17:00\",\n      \"pricePerHour\": 120000\n    },\n    {\n      \"dayType\": \"WEEKDAY\",\n      \"startTime\": \"17:00\",\n      \"endTime\": \"22:00\",\n      \"pricePerHour\": 180000\n    },\n    {\n      \"dayType\": \"WEEKEND\",\n      \"startTime\": \"06:00\",\n      \"endTime\": \"17:00\",\n      \"pricePerHour\": 150000\n    },\n    {\n      \"dayType\": \"WEEKEND\",\n      \"startTime\": \"17:00\",\n      \"endTime\": \"22:00\",\n      \"pricePerHour\": 220000\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Danh mục dịch vụ",
+      "item": [
+        {
+          "name": "Staff xem dịch vụ cơ sở mình",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/venues/1/services",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('Có Revive 15.000đ', () => pm.expect(pm.response.json().services.find(s => s.name === 'Nước điện giải Revive').unitPrice).to.eql(15000));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer không xem danh mục nội bộ",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/venues/1/services",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 FORBIDDEN', () => { pm.response.to.have.status(403); pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager Q7 xem dịch vụ Thủ Đức",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/venues/2/services",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 FORBIDDEN', () => { pm.response.to.have.status(403); pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager thêm Khăn lạnh",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/venues/1/services",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Khăn lạnh\",\n  \"category\": \"OTHER\",\n  \"unit\": \"Cái\",\n  \"unitPrice\": 5000\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('newServiceId', pm.response.json().service.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Giá dịch vụ lẻ 5.500 bị từ chối",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/venues/1/services",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Khăn ướt\",\n  \"category\": \"OTHER\",\n  \"unit\": \"Gói\",\n  \"unitPrice\": 5500\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 VALIDATION_ERROR', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager đổi giá Khăn lạnh",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/services/{{newServiceId}}",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitPrice\": 6000\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('Giá mới 6.000', () => pm.expect(pm.response.json().service.unitPrice).to.eql(6000));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff không được sửa giá",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/services/{{newServiceId}}",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitPrice\": 1000\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 FORBIDDEN', () => { pm.response.to.have.status(403); pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ngừng bán Khăn lạnh",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/services/{{newServiceId}}",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('isActive = false', () => pm.expect(pm.response.json().service.isActive).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Món ngừng bán không còn trên POS",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/venues/1/services",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Không có Khăn lạnh', () => pm.expect(pm.response.json().services.map(s => s.id)).to.not.include(pm.collectionVariables.get('newServiceId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager vẫn xem được món ngừng bán",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/venues/1/services?includeInactive=true",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Có Khăn lạnh', () => pm.expect(pm.response.json().services.map(s => s.id)).to.include(pm.collectionVariables.get('newServiceId')));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Bảo trì sân",
+      "item": [
+        {
+          "name": "Đóng sân phải có lý do",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/courts/2/status",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"MAINTENANCE\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 VALIDATION_ERROR', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff không được đóng sân",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/courts/2/status",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"MAINTENANCE\",\n  \"reason\": \"x\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 FORBIDDEN', () => { pm.response.to.have.status(403); pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager chuyển Sân 02 sang bảo trì",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/courts/2/status",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"MAINTENANCE\",\n  \"reason\": \"Thay lưới và sơn lại vạch\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('Trạng thái MAINTENANCE và trả về danh sách đơn bị ảnh hưởng', () => { const b = pm.response.json(); pm.expect(b.court.status).to.eql('MAINTENANCE'); pm.expect(b.affectedBookings).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sân bảo trì không nhận báo giá",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/courts/2/quote?date=2026-11-02&start=18:00&end=19:00",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('409 COURT_UNAVAILABLE', () => { pm.response.to.have.status(409); pm.expect(pm.response.json().error.code).to.eql('COURT_UNAVAILABLE'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mở lại Sân 02",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/courts/2/status",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('ACTIVE', () => pm.expect(pm.response.json().court.status).to.eql('ACTIVE'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mở lại lần nữa báo không đổi",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/courts/2/status",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('409 STATUS_UNCHANGED', () => { pm.response.to.have.status(409); pm.expect(pm.response.json().error.code).to.eql('STATUS_UNCHANGED'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

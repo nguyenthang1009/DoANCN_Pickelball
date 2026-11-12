@@ -5,7 +5,11 @@ const { bcryptRounds } = require('../config/env');
 const HttpError = require('../utils/httpError');
 const { isEmail, isPhone, assertRequired } = require('../utils/validators');
 
-const PUBLIC_COLUMNS = 'id, full_name, email, phone, role, venue_id, is_active, must_change_password, created_at';
+// Vai trò hiệu lực: vai trò tự tạo nếu có, nếu không là vai trò hệ thống trùng tên users.role
+const USER_SELECT = `
+  SELECT u.id, u.full_name, u.email, u.phone, u.role, u.venue_id, u.is_active, u.must_change_password, u.created_at,
+         r.id AS role_id, r.name AS role_name
+    FROM users u JOIN roles r ON r.id = u.custom_role_id OR (u.custom_role_id IS NULL AND r.code = u.role)`;
 const INTERNAL_ROLES = ['ADMIN', 'MANAGER', 'STAFF'];
 
 function toPublicUser(row) {
@@ -15,6 +19,8 @@ function toPublicUser(row) {
     email: row.email,
     phone: row.phone,
     role: row.role,
+    roleId: row.role_id,
+    roleName: row.role_name,
     venueId: row.venue_id,
     isActive: Boolean(row.is_active),
     mustChangePassword: Boolean(row.must_change_password),
@@ -23,16 +29,18 @@ function toPublicUser(row) {
 }
 
 async function findById(id) {
-  const [rows] = await pool.query(`SELECT ${PUBLIC_COLUMNS} FROM users WHERE id = ?`, [id]);
-  return rows[0] ? toPublicUser(rows[0]) : null;
+  const [rows] = await pool.query(`${USER_SELECT} WHERE u.id = ?`, [id]);
+  if (!rows[0]) return null;
+  const [perms] = await pool.query('SELECT permission_code FROM role_permissions WHERE role_id = ?', [rows[0].role_id]);
+  return { ...toPublicUser(rows[0]), permissions: perms.map((p) => p.permission_code) };
 }
 
 async function listUsers({ role, venueId } = {}) {
   const where = [];
   const params = [];
-  if (role) { where.push('role = ?'); params.push(role); }
-  if (venueId) { where.push('venue_id = ?'); params.push(venueId); }
-  const sql = `SELECT ${PUBLIC_COLUMNS} FROM users ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id`;
+  if (role) { where.push('u.role = ?'); params.push(role); }
+  if (venueId) { where.push('u.venue_id = ?'); params.push(venueId); }
+  const sql = `${USER_SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY u.id`;
   const [rows] = await pool.query(sql, params);
   return rows.map(toPublicUser);
 }
@@ -76,4 +84,25 @@ async function createInternalUser({ fullName, email, phone, role, venueId }) {
   }
 }
 
-module.exports = { toPublicUser, findById, listUsers, createInternalUser, rethrowDuplicate };
+// Hệ thống luôn còn ít nhất một Admin đang hoạt động ngoài tài khoản sắp bị khóa hoặc đổi vai trò
+async function assertAnotherAdmin(userId, db = pool) {
+  const [[{ total }]] = await db.query("SELECT COUNT(*) AS total FROM users WHERE role = 'ADMIN' AND is_active = TRUE AND id <> ?", [userId]);
+  if (!total) throw new HttpError(409, 'LAST_ADMIN', 'Hệ thống phải còn ít nhất một Admin');
+}
+
+// G7, US-A03: Admin khóa / mở khóa tài khoản; không tự khóa chính mình
+async function setActive(id, isActive, actor) {
+  if (typeof isActive !== 'boolean') throw new HttpError(400, 'VALIDATION_ERROR', 'isActive phải là true hoặc false');
+  if (id === actor.id) throw new HttpError(409, 'CANNOT_LOCK_SELF', 'Không thể tự khóa tài khoản của mình');
+  const user = await findById(id);
+  if (!user) throw new HttpError(404, 'USER_NOT_FOUND', 'Không tìm thấy tài khoản');
+  if (!isActive && user.role === 'ADMIN') await assertAnotherAdmin(id);
+  await pool.query('UPDATE users SET is_active = ? WHERE id = ?', [isActive, id]);
+  await pool.query(
+    'INSERT INTO audit_logs (actor_id, venue_id, action_type, entity_type, entity_id, old_values, new_values) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [actor.id, user.venueId, isActive ? 'UNLOCK_USER' : 'LOCK_USER', 'USER', id, JSON.stringify({ isActive: user.isActive }), JSON.stringify({ isActive })],
+  );
+  return findById(id);
+}
+
+module.exports = { toPublicUser, findById, listUsers, createInternalUser, setActive, rethrowDuplicate, assertAnotherAdmin };

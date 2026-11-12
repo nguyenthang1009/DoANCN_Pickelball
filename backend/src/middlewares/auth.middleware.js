@@ -1,15 +1,15 @@
 const jwt = require('jsonwebtoken');
 const { jwt: jwtConfig } = require('../config/env');
 const HttpError = require('../utils/httpError');
+const { ACCESS_COOKIE } = require('../utils/cookies');
 const userService = require('../services/user.service');
 
 // Xác thực JWT, rồi đọc lại user từ CSDL để khóa tài khoản / đổi vai trò có hiệu lực ngay
 async function verifyToken(req, res, next) {
-  const header = req.get('Authorization') || '';
-  const [scheme, token] = header.split(' ');
-  if (scheme !== 'Bearer' || !token) {
-    throw new HttpError(401, 'UNAUTHENTICATED', 'Thiếu token đăng nhập');
-  }
+  // Trình duyệt dùng cookie httpOnly; Postman và script kiểm thử vẫn gửi header Bearer
+  const [scheme, bearer] = (req.get('Authorization') || '').split(' ');
+  const token = scheme === 'Bearer' && bearer ? bearer : req.cookies?.[ACCESS_COOKIE];
+  if (!token) throw new HttpError(401, 'UNAUTHENTICATED', 'Thiếu token đăng nhập');
 
   let payload;
   try {
@@ -27,28 +27,31 @@ async function verifyToken(req, res, next) {
   next();
 }
 
-// Chặn theo vai trò. Tài khoản còn cờ đổi mật khẩu lần đầu chưa được dùng chức năng nghiệp vụ.
-function authorize(roles = []) {
+// Chặn theo mã quyền: có một trong các quyền là được; không truyền mã nghĩa là chỉ cần đăng nhập.
+// Tài khoản còn cờ đổi mật khẩu lần đầu chưa được dùng chức năng nghiệp vụ.
+function can(...codes) {
   return (req, res, next) => {
     if (req.user.mustChangePassword) {
       throw new HttpError(403, 'PASSWORD_CHANGE_REQUIRED', 'Bạn cần đổi mật khẩu trước khi tiếp tục');
     }
-    if (roles.length && !roles.includes(req.user.role)) {
+    if (codes.length && !codes.some((code) => req.user.permissions.includes(code))) {
       throw new HttpError(403, 'FORBIDDEN', 'Bạn không có quyền thực hiện chức năng này');
     }
     next();
   };
 }
 
-// BR15: Manager/Staff chỉ thao tác trên cơ sở được gán; Admin xem được mọi cơ sở
-function authorizeVenue(paramName = 'venueId') {
+// BR15: Manager/Staff chỉ thao tác trên cơ sở được gán; Admin xem được mọi cơ sở.
+// Tham số là tên param chứa venueId, hoặc hàm lấy venueId từ req (VD: req => req.court.venueId).
+function authorizeVenue(source = 'venueId') {
+  const getVenueId = typeof source === 'function' ? source : (req) => req.params[source];
   return (req, res, next) => {
     if (req.user.role === 'ADMIN') return next();
-    if (Number(req.params[paramName]) !== req.user.venueId) {
+    if (Number(getVenueId(req)) !== req.user.venueId) {
       throw new HttpError(403, 'FORBIDDEN', 'Bạn chỉ được thao tác trên cơ sở của mình');
     }
     next();
   };
 }
 
-module.exports = { verifyToken, authorize, authorizeVenue };
+module.exports = { verifyToken, can, authorizeVenue };

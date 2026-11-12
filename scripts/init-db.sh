@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
+# Tạo lại CSDL từ database/schema.sql và nạp database/seed.sql. XÓA dữ liệu cũ của CSDL cùng tên.
+# Mặc định: tài khoản root không mật khẩu (Laragon), CSDL pickleball_booking. Đổi bằng biến môi trường:
+#   DB_USER=root DB_PASSWORD=matkhau DB_NAME=pickleball_booking bash scripts/init-db.sh
 set -e
 
-DB_USER="root"
-DB_NAME="pickleball_booking"
+DB_USER="${DB_USER:-root}"
+DB_NAME="${DB_NAME:-pickleball_booking}"
+# Mật khẩu truyền qua biến MYSQL_PWD để không hiện trên dòng lệnh
+if [ -n "$DB_PASSWORD" ]; then export MYSQL_PWD="$DB_PASSWORD"; fi
 
 # Tự động dò tìm file mysql.exe của Laragon ở ổ C hoặc ổ D
 if command -v mysql >/dev/null 2>&1; then
@@ -17,14 +22,15 @@ if [ -z "$MYSQL_CMD" ]; then
 fi
 
 echo "=========================================================="
-echo "  KHOI TAO CSDL PICKLEBALL BOOKING (TUAN 3 - 3NF SCHEMA)  "
+echo "  KHOI TAO CSDL PICKLEBALL BOOKING: $DB_NAME"
 echo "=========================================================="
 echo "-> Dang su dung MySQL tai: $MYSQL_CMD"
 
 # utf8mb4: client mysql tren Windows mac dinh cp850, se lam hong tieng Viet trong seed
-"$MYSQL_CMD" -u "$DB_USER" --default-character-set=utf8mb4 < ./database/schema.sql
-echo "[OK] Da tao 13 bang chuan 3NF va Unique Slot Lock thanh cong!"
+sed "s/pickleball_booking/$DB_NAME/g" ./database/schema.sql | "$MYSQL_CMD" -u "$DB_USER" --default-character-set=utf8mb4
+echo "[OK] Da tao 36 bang chuan 3NF va Unique Slot Lock thanh cong!"
 
-"$MYSQL_CMD" -u "$DB_USER" --default-character-set=utf8mb4 "$DB_NAME" < ./database/seed.sql
-echo "[OK] Da nap du lieu mau (Configs, Venues, Courts, Price Rules, Services)!"
-echo "Hoan tat! Mo DBeaver nhan F5 de kiem tra ERD."
+# seed.sql mở đầu bằng USE pickleball_booking: đổi theo DB_NAME để không nạp nhầm vào CSDL khác
+sed "s/pickleball_booking/$DB_NAME/g" ./database/seed.sql | "$MYSQL_CMD" -u "$DB_USER" --default-character-set=utf8mb4 "$DB_NAME"
+echo "[OK] Da nap du lieu mau (tai khoan, co so, san, bang gia, dich vu, tham so phap ly)!"
+echo "Hoan tat! Mo HeidiSQL hoac DBeaver de kiem tra."

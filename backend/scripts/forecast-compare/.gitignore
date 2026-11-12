@@ -1,0 +1,3 @@
+.venv/
+.pip-tmp/
+series.json

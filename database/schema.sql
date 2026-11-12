@@ -199,6 +199,9 @@ CREATE TABLE payment_transactions (
     booking_id INT UNSIGNED NOT NULL,
     payos_order_code BIGINT UNSIGNED NOT NULL UNIQUE,      -- Mã orderCode số nguyên gửi sang PayOS
     payos_transaction_id VARCHAR(100) NULL UNIQUE,         -- G5, TC09: Chống xử lý lặp cùng 1 Webhook
+    payment_link_id VARCHAR(100) NULL,                     -- Tuần 8: mã link thanh toán PayOS trả về
+    checkout_url VARCHAR(255) NULL,                        -- Tuần 8: trang thanh toán của PayOS
+    qr_code TEXT NULL,                                     -- Tuần 8: chuỗi VietQR để vẽ mã QR trên trang thanh toán
     amount INT UNSIGNED NOT NULL,                          -- Số tiền thực nhận (VND)
     transaction_status ENUM('PENDING', 'SUCCESS', 'FAILED', 'INVALID_SIGNATURE', 'AMOUNT_MISMATCH') NOT NULL DEFAULT 'PENDING',
     raw_webhook_payload JSON NULL,                         -- NFR12: Lưu toàn bộ JSON gốc từ PayOS để đối soát
@@ -294,4 +297,404 @@ CREATE TABLE audit_logs (
     CONSTRAINT fk_audit_venue FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE SET NULL,
     INDEX idx_audit_venue_time (venue_id, created_at),
     INDEX idx_audit_entity (entity_type, entity_id)
+) ENGINE=InnoDB;
+
+-- ----------------------------------------------------------------------------
+-- 13. PHÂN QUYỀN THEO MÃ CHỨC NĂNG (ROLES, PERMISSIONS, ROLE_PERMISSIONS)
+-- users.role giữ vai trò cấp phạm vi dữ liệu (toàn chuỗi / theo cơ sở / của mình, BR15).
+-- users.custom_role_id trỏ tới vai trò tự tạo; NULL nghĩa là dùng vai trò hệ thống trùng tên users.role.
+-- ----------------------------------------------------------------------------
+CREATE TABLE roles (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(40) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    base_role ENUM('ADMIN', 'MANAGER', 'STAFF', 'CUSTOMER') NOT NULL, -- Cấp phạm vi dữ liệu của vai trò
+    is_system BOOLEAN NOT NULL DEFAULT FALSE,     -- Vai trò hệ thống không xóa được
+    created_by INT UNSIGNED NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_roles_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE permissions (
+    code VARCHAR(50) PRIMARY KEY,                 -- VD: booking.refund, court.manage
+    module VARCHAR(50) NOT NULL,                  -- Nhóm hiển thị trên ma trận quyền
+    description VARCHAR(255) NOT NULL,
+    admin_only BOOLEAN NOT NULL DEFAULT FALSE,    -- Quyền quản trị, không gán cho vai trò khác ngoài Admin
+    sort_order INT UNSIGNED NOT NULL DEFAULT 0
+) ENGINE=InnoDB;
+
+CREATE TABLE role_permissions (
+    role_id INT UNSIGNED NOT NULL,
+    permission_code VARCHAR(50) NOT NULL,
+    PRIMARY KEY (role_id, permission_code),
+    CONSTRAINT fk_rp_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+    CONSTRAINT fk_rp_permission FOREIGN KEY (permission_code) REFERENCES permissions(code) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+ALTER TABLE users
+ADD COLUMN custom_role_id INT UNSIGNED NULL AFTER role,
+ADD CONSTRAINT fk_users_custom_role FOREIGN KEY (custom_role_id) REFERENCES roles(id) ON DELETE RESTRICT;
+
+-- ----------------------------------------------------------------------------
+-- 14. BẢNG REFRESH TOKEN (REFRESH_TOKENS) - Phiên đăng nhập xoay vòng, phát hiện token bị dùng lại
+-- ----------------------------------------------------------------------------
+CREATE TABLE refresh_tokens (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NOT NULL,
+    family_id CHAR(36) NOT NULL,                  -- Các token nối tiếp nhau của cùng một lần đăng nhập
+    token_hash CHAR(64) NOT NULL UNIQUE,          -- Chỉ lưu SHA-256, không lưu token gốc
+    expires_at TIMESTAMP NOT NULL,
+    rotated_at TIMESTAMP NULL,                    -- Đã đổi lấy token mới; dùng lại sau thời gian chờ là dấu hiệu lộ token
+    revoked_at TIMESTAMP NULL,                    -- Đã thu hồi: đăng xuất, đổi mật khẩu hoặc phát hiện lộ token
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_refresh_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_refresh_family (family_id),
+    INDEX idx_refresh_expiry (expires_at)
+) ENGINE=InnoDB;
+
+
+-- ----------------------------------------------------------------------------
+-- 15. THAM SỐ PHÁP LÝ THEO NGÀY HIỆU LỰC - VAT, bảo hiểm, thuế TNCN, lương tối thiểu.
+-- Tiền lưu VND số nguyên; tỷ lệ lưu theo phần vạn (800 = 8%). Luật đổi thì thêm dòng mới, không sửa dòng cũ.
+-- ----------------------------------------------------------------------------
+CREATE TABLE legal_parameters (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(40) NOT NULL,
+    label VARCHAR(150) NOT NULL,
+    value BIGINT NOT NULL,
+    unit ENUM('VND', 'BP', 'NUMBER') NOT NULL DEFAULT 'VND', -- BP: phần vạn
+    effective_from DATE NOT NULL,
+    effective_to DATE NULL,
+    legal_ref VARCHAR(255) NOT NULL,              -- Căn cứ pháp lý để đối chiếu
+    updated_by INT UNSIGNED NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_legal_param UNIQUE (code, effective_from),
+    CONSTRAINT fk_legal_updater FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE pit_brackets (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    effective_from DATE NOT NULL,
+    upper_limit BIGINT NULL,                      -- NULL: bậc cao nhất
+    rate_bp INT UNSIGNED NOT NULL,
+    legal_ref VARCHAR(255) NOT NULL,
+    CONSTRAINT uq_pit_bracket UNIQUE (effective_from, upper_limit)
+) ENGINE=InnoDB;
+
+-- ----------------------------------------------------------------------------
+-- 16. HÓA ĐƠN BÁN HÀNG (INVOICES) - Số liên tục, chốt thuế suất và thông tin bên bán lúc phát hành.
+-- Không sửa, không xóa: sai sót hoặc hoàn tiền được xử lý bằng hóa đơn điều chỉnh giảm (CREDIT).
+-- ----------------------------------------------------------------------------
+CREATE TABLE invoice_sequences (
+    series VARCHAR(10) PRIMARY KEY,
+    last_no INT UNSIGNED NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE invoices (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    invoice_no VARCHAR(24) NOT NULL UNIQUE,       -- VD: HD2026-0000123
+    series VARCHAR(10) NOT NULL,
+    seq INT UNSIGNED NOT NULL,
+    invoice_type ENUM('SALE', 'CREDIT') NOT NULL DEFAULT 'SALE',
+    original_invoice_id INT UNSIGNED NULL,        -- CREDIT trỏ về hóa đơn gốc
+    venue_id INT UNSIGNED NOT NULL,
+    booking_id INT UNSIGNED NULL,
+    service_order_id INT UNSIGNED NULL,           -- Bán lẻ không kèm đơn sân
+    customer_id INT UNSIGNED NULL,
+    buyer_name VARCHAR(100) NOT NULL,
+    buyer_phone VARCHAR(20) NULL,
+    payment_method ENUM('VIETQR', 'CASH') NOT NULL,
+    invoice_date DATE NOT NULL,
+    vat_rate_bp INT UNSIGNED NOT NULL,            -- Chốt thuế suất lúc phát hành
+    subtotal INT UNSIGNED NOT NULL,               -- Tiền chưa thuế
+    vat_amount INT UNSIGNED NOT NULL,
+    total INT UNSIGNED NOT NULL,                  -- Khách trả, đã gồm thuế
+    seller JSON NOT NULL,                         -- Chốt thông tin bên bán lúc phát hành
+    issued_by INT UNSIGNED NULL,                  -- NULL: hệ thống phát hành khi nhận tiền qua PayOS
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_invoice_seq UNIQUE (series, seq),
+    CONSTRAINT uq_invoice_booking UNIQUE (booking_id, invoice_type),
+    CONSTRAINT uq_invoice_order UNIQUE (service_order_id, invoice_type),
+    CONSTRAINT chk_invoice_total CHECK (total = subtotal + vat_amount),
+    CONSTRAINT fk_inv_original FOREIGN KEY (original_invoice_id) REFERENCES invoices(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_inv_venue FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_inv_booking FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_inv_order FOREIGN KEY (service_order_id) REFERENCES service_orders(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_inv_customer FOREIGN KEY (customer_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_inv_issuer FOREIGN KEY (issued_by) REFERENCES users(id) ON DELETE RESTRICT,
+    INDEX idx_inv_venue_date (venue_id, invoice_date),
+    INDEX idx_inv_customer (customer_id, invoice_date)
+) ENGINE=InnoDB;
+
+CREATE TABLE invoice_lines (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    invoice_id INT UNSIGNED NOT NULL,
+    description VARCHAR(255) NOT NULL,
+    quantity INT UNSIGNED NOT NULL,
+    unit VARCHAR(30) NOT NULL,
+    gross_amount INT UNSIGNED NOT NULL,           -- Thành tiền đã gồm thuế
+    net_amount INT UNSIGNED NOT NULL,
+    vat_amount INT UNSIGNED NOT NULL,
+    revenue_account VARCHAR(10) NOT NULL,         -- Tài khoản doanh thu của dòng này
+    CONSTRAINT chk_line_total CHECK (gross_amount = net_amount + vat_amount),
+    CONSTRAINT fk_il_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+-- ----------------------------------------------------------------------------
+-- 17. SỔ CÁI KẾ TOÁN KÉP (GL) - Nguồn số liệu duy nhất cho báo cáo tài chính
+-- ----------------------------------------------------------------------------
+CREATE TABLE gl_accounts (
+    code VARCHAR(10) PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    account_type ENUM('ASSET', 'LIABILITY', 'REVENUE', 'EXPENSE') NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE gl_entries (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    entry_date DATE NOT NULL,
+    venue_id INT UNSIGNED NULL,
+    source_type VARCHAR(30) NOT NULL,             -- INVOICE, HELD_RECEIPT, HELD_REFUND, PAYROLL_ACCRUAL, PAYROLL_PAYMENT
+    source_id BIGINT UNSIGNED NOT NULL,
+    memo VARCHAR(255) NOT NULL,
+    created_by INT UNSIGNED NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_gl_source UNIQUE (source_type, source_id),   -- Một chứng từ chỉ ghi sổ một lần
+    CONSTRAINT fk_gl_venue FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_gl_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT,
+    INDEX idx_gl_date (entry_date, venue_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE gl_lines (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    entry_id BIGINT UNSIGNED NOT NULL,
+    account_code VARCHAR(10) NOT NULL,
+    debit BIGINT NOT NULL DEFAULT 0,              -- Số có dấu để báo cáo trừ nợ cho có không bị tràn
+    credit BIGINT NOT NULL DEFAULT 0,
+    CONSTRAINT chk_gl_positive CHECK (debit >= 0 AND credit >= 0),
+    CONSTRAINT chk_gl_side CHECK ((debit = 0) <> (credit = 0)),
+    CONSTRAINT fk_gll_entry FOREIGN KEY (entry_id) REFERENCES gl_entries(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_gll_account FOREIGN KEY (account_code) REFERENCES gl_accounts(code) ON DELETE RESTRICT,
+    INDEX idx_gll_account (account_code)
+) ENGINE=InnoDB;
+
+-- Chứng từ đã ghi sổ không sửa, không xóa được, kể cả khi thao tác thẳng trên CSDL
+CREATE TRIGGER trg_invoices_no_update BEFORE UPDATE ON invoices FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Hoa don da phat hanh khong duoc sua';
+CREATE TRIGGER trg_invoices_no_delete BEFORE DELETE ON invoices FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Hoa don da phat hanh khong duoc xoa';
+CREATE TRIGGER trg_invoice_lines_no_update BEFORE UPDATE ON invoice_lines FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Hoa don da phat hanh khong duoc sua';
+CREATE TRIGGER trg_invoice_lines_no_delete BEFORE DELETE ON invoice_lines FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Hoa don da phat hanh khong duoc xoa';
+CREATE TRIGGER trg_gl_entries_no_update BEFORE UPDATE ON gl_entries FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'So cai khong duoc sua';
+CREATE TRIGGER trg_gl_entries_no_delete BEFORE DELETE ON gl_entries FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'So cai khong duoc xoa';
+CREATE TRIGGER trg_gl_lines_no_update BEFORE UPDATE ON gl_lines FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'So cai khong duoc sua';
+CREATE TRIGGER trg_gl_lines_no_delete BEFORE DELETE ON gl_lines FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'So cai khong duoc xoa';
+
+-- ----------------------------------------------------------------------------
+-- 18. TIỀN LƯƠNG - Hợp đồng theo ngày hiệu lực, kỳ lương theo cơ sở, phiếu lương chốt số liệu
+-- ----------------------------------------------------------------------------
+CREATE TABLE employee_contracts (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NOT NULL,
+    position VARCHAR(100) NOT NULL,
+    pay_type ENUM('MONTHLY', 'DAILY', 'HOURLY', 'SHIFT') NOT NULL DEFAULT 'MONTHLY', -- Hình thức trả lương (Điều 96 BLLĐ 2019)
+    base_salary INT UNSIGNED NOT NULL,            -- Lương tháng, hoặc đơn giá một ngày / một giờ / một ca
+    unit_hours DECIMAL(3,1) NOT NULL DEFAULT 8.0, -- Số giờ của một ngày công hoặc một ca, để quy ra lương giờ
+    weekly_rest_day TINYINT UNSIGNED NOT NULL DEFAULT 0, -- Ngày nghỉ hằng tuần 0 = Chủ nhật ... 6 = Thứ bảy (Điều 111)
+    allowance INT UNSIGNED NOT NULL DEFAULT 0,    -- Phụ cấp tính thuế
+    insured_salary INT UNSIGNED NOT NULL,         -- Lương đóng bảo hiểm
+    dependents TINYINT UNSIGNED NOT NULL DEFAULT 0,  -- Người phụ thuộc đã đăng ký giảm trừ
+    wage_region TINYINT UNSIGNED NOT NULL DEFAULT 1, -- Vùng lương tối thiểu 1-4
+    effective_from DATE NOT NULL,
+    effective_to DATE NULL,
+    updated_by INT UNSIGNED NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_contract UNIQUE (user_id, effective_from),
+    CONSTRAINT chk_region CHECK (wage_region BETWEEN 1 AND 4),
+    CONSTRAINT chk_contract_hours CHECK (unit_hours > 0 AND unit_hours <= 12 AND weekly_rest_day <= 6),
+    CONSTRAINT fk_contract_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_contract_updater FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE payroll_periods (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    venue_id INT UNSIGNED NOT NULL,
+    period_month CHAR(7) NOT NULL,                -- VD: 2026-11
+    standard_days TINYINT UNSIGNED NOT NULL,      -- Số ngày công chuẩn của tháng
+    status ENUM('DRAFT', 'APPROVED', 'PAID') NOT NULL DEFAULT 'DRAFT',
+    created_by INT UNSIGNED NOT NULL,
+    approved_by INT UNSIGNED NULL,
+    approved_at TIMESTAMP NULL,
+    paid_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_period UNIQUE (venue_id, period_month),
+    CONSTRAINT fk_period_venue FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_period_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_period_approver FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE payslips (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    period_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    contract_id INT UNSIGNED NOT NULL,
+    pay_type ENUM('MONTHLY', 'DAILY', 'HOURLY', 'SHIFT') NOT NULL DEFAULT 'MONTHLY',
+    source ENUM('MANUAL', 'ATTENDANCE') NOT NULL DEFAULT 'MANUAL', -- Nhập tay hay tổng hợp từ chấm công
+    -- Dữ liệu chấm công (giờ làm thêm tính theo phút để tránh số lẻ)
+    work_days DECIMAL(4,1) NOT NULL DEFAULT 0,
+    paid_holidays TINYINT UNSIGNED NOT NULL DEFAULT 0, -- Ngày lễ hưởng nguyên lương (Điều 112)
+    units DECIMAL(7,2) NOT NULL DEFAULT 0,        -- Số giờ / ngày / ca trong giờ làm việc bình thường
+    ot_weekday_minutes INT UNSIGNED NOT NULL DEFAULT 0,
+    ot_weekend_minutes INT UNSIGNED NOT NULL DEFAULT 0,
+    ot_holiday_minutes INT UNSIGNED NOT NULL DEFAULT 0,
+    night_minutes INT UNSIGNED NOT NULL DEFAULT 0, -- Làm ban đêm trong giờ bình thường
+    ot_night_minutes INT UNSIGNED NOT NULL DEFAULT 0, -- Phần làm thêm rơi vào ban đêm (đã nằm trong ot_*_minutes)
+    timesheet JSON NULL,                          -- Chi tiết từng ngày khi tổng hợp từ chấm công
+    -- Kết quả tính
+    base_pay INT UNSIGNED NOT NULL DEFAULT 0,
+    allowance INT UNSIGNED NOT NULL DEFAULT 0,
+    ot_pay INT UNSIGNED NOT NULL DEFAULT 0,
+    night_pay INT UNSIGNED NOT NULL DEFAULT 0,
+    gross_pay INT UNSIGNED NOT NULL DEFAULT 0,
+    si_employee INT UNSIGNED NOT NULL DEFAULT 0,
+    hi_employee INT UNSIGNED NOT NULL DEFAULT 0,
+    ui_employee INT UNSIGNED NOT NULL DEFAULT 0,
+    si_employer INT UNSIGNED NOT NULL DEFAULT 0,
+    hi_employer INT UNSIGNED NOT NULL DEFAULT 0,
+    ui_employer INT UNSIGNED NOT NULL DEFAULT 0,
+    tax_exempt_ot INT UNSIGNED NOT NULL DEFAULT 0, -- Phần tiền làm thêm cao hơn giờ thường, không tính thuế
+    self_deduction INT UNSIGNED NOT NULL DEFAULT 0,
+    dependent_deduction INT UNSIGNED NOT NULL DEFAULT 0,
+    assessable_income INT UNSIGNED NOT NULL DEFAULT 0, -- Thu nhập tính thuế
+    pit INT UNSIGNED NOT NULL DEFAULT 0,
+    net_pay INT UNSIGNED NOT NULL DEFAULT 0,
+    parameters JSON NULL,                         -- Chốt tham số pháp lý đã dùng để tính
+    CONSTRAINT uq_payslip UNIQUE (period_id, user_id),
+    CONSTRAINT fk_slip_period FOREIGN KEY (period_id) REFERENCES payroll_periods(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_slip_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_slip_contract FOREIGN KEY (contract_id) REFERENCES employee_contracts(id) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+-- ----------------------------------------------------------------------------
+-- 19. NỘI DUNG WEBSITE - Ảnh thay thế và thông tin đồ án do Admin quản lý.
+-- Không có dòng nào cho một vị trí nghĩa là dùng ảnh mặc định của frontend.
+-- ----------------------------------------------------------------------------
+CREATE TABLE site_media (
+    media_key VARCHAR(60) PRIMARY KEY,            -- VD: hero.1, auth.login.2
+    url VARCHAR(255) NULL,                        -- NULL: giữ ảnh mặc định, chỉ đổi điểm lấy nét
+    alt VARCHAR(255) NULL,
+    focus_x TINYINT UNSIGNED NOT NULL DEFAULT 50, -- Điểm giữ lại khi cắt ảnh theo khổ màn hình (%)
+    focus_y TINYINT UNSIGNED NOT NULL DEFAULT 50,
+    updated_by INT UNSIGNED NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_media_updater FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE site_settings (
+    setting_key VARCHAR(60) PRIMARY KEY,
+    setting_value TEXT NOT NULL,
+    updated_by INT UNSIGNED NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_setting_updater FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+
+-- ----------------------------------------------------------------------------
+-- 20. CHIẾU SÁNG THÔNG MINH (FUZZY LOGIC + IOT) - Số đo cảm biến, kết quả điều khiển, nhật ký để tính điện năng
+-- ----------------------------------------------------------------------------
+CREATE TABLE court_lighting (
+    court_id INT UNSIGNED PRIMARY KEY,
+    lux SMALLINT UNSIGNED NULL,                   -- Ánh sáng môi trường; NULL: chưa có số đo, coi như trời tối
+    activity DECIMAL(3,1) NULL,                   -- Mức hoạt động 0-10; NULL: suy ra từ trạng thái check-in
+    sensor_source ENUM('SIMULATOR', 'DEVICE') NULL,
+    sensor_at TIMESTAMP NULL,
+    mode ENUM('AUTO', 'MANUAL') NOT NULL DEFAULT 'AUTO',
+    manual_level TINYINT UNSIGNED NULL,
+    bulb_ip VARCHAR(15) NULL,                     -- Đèn Yeelight trong mạng nội bộ
+    state ENUM('ACTIVE', 'PREPARING', 'IDLE', 'MAINTENANCE') NULL,
+    level TINYINT UNSIGNED NOT NULL DEFAULT 0,    -- Độ sáng đang áp dụng (%)
+    warning BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT chk_lighting_level CHECK (level <= 100 AND (manual_level IS NULL OR manual_level <= 100)),
+    CONSTRAINT fk_lighting_court FOREIGN KEY (court_id) REFERENCES courts(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE lighting_logs (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    court_id INT UNSIGNED NOT NULL,
+    venue_id INT UNSIGNED NOT NULL,
+    state ENUM('ACTIVE', 'PREPARING', 'IDLE', 'MAINTENANCE') NOT NULL,
+    lux SMALLINT UNSIGNED NOT NULL,
+    activity DECIMAL(3,1) NOT NULL,
+    level TINYINT UNSIGNED NOT NULL,
+    warning BOOLEAN NOT NULL,
+    mode ENUM('AUTO', 'MANUAL') NOT NULL,
+    created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    CONSTRAINT fk_lightlog_court FOREIGN KEY (court_id) REFERENCES courts(id) ON DELETE CASCADE,
+    CONSTRAINT fk_lightlog_venue FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE RESTRICT,
+    INDEX idx_lightlog_venue_time (venue_id, created_at),
+    INDEX idx_lightlog_court_time (court_id, created_at)
+) ENGINE=InnoDB;
+
+-- ----------------------------------------------------------------------------
+-- 21. XẾP CA VÀ CHẤM CÔNG - Mẫu ca, lịch ca theo ngày, giờ vào ra thực tế, ngày lễ để tính lương theo luật.
+-- Giờ lưu kiểu DATETIME theo giờ Việt Nam để cắt ngày, ban đêm (22h-6h) đúng như trên bảng công.
+-- ----------------------------------------------------------------------------
+CREATE TABLE public_holidays (
+    holiday_date DATE PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    legal_ref VARCHAR(255) NOT NULL,
+    updated_by INT UNSIGNED NULL,
+    CONSTRAINT fk_holiday_updater FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE shift_templates (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    venue_id INT UNSIGNED NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,                       -- Nhỏ hơn giờ bắt đầu: ca qua nửa đêm
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    CONSTRAINT uq_shift_name UNIQUE (venue_id, name),
+    CONSTRAINT chk_shift_times CHECK (start_time <> end_time),
+    CONSTRAINT fk_shift_venue FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE shift_assignments (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    venue_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    template_id INT UNSIGNED NOT NULL,
+    work_date DATE NOT NULL,
+    starts_at DATETIME NOT NULL,                  -- Chốt giờ ca lúc xếp, sửa mẫu ca không đổi lịch cũ
+    ends_at DATETIME NOT NULL,
+    created_by INT UNSIGNED NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_assignment UNIQUE (user_id, work_date, template_id),
+    CONSTRAINT chk_assignment_times CHECK (ends_at > starts_at),
+    CONSTRAINT fk_assign_venue FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_assign_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_assign_template FOREIGN KEY (template_id) REFERENCES shift_templates(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_assign_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT,
+    INDEX idx_assign_venue_date (venue_id, work_date)
+) ENGINE=InnoDB;
+
+CREATE TABLE attendance_records (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    venue_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    assignment_id INT UNSIGNED NULL,              -- NULL: làm ngoài lịch ca
+    clock_in DATETIME NOT NULL,
+    clock_out DATETIME NULL,                      -- NULL: đang trong ca
+    source ENUM('SELF', 'MANAGER') NOT NULL DEFAULT 'SELF',
+    note VARCHAR(255) NULL,
+    updated_by INT UNSIGNED NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Mỗi người chỉ có một lượt đang mở: cột sinh ra bằng user_id khi chưa ra ca, NULL khi đã ra
+    open_user_id INT UNSIGNED GENERATED ALWAYS AS (IF(clock_out IS NULL, user_id, NULL)) STORED,
+    CONSTRAINT uq_attendance_open UNIQUE (open_user_id),
+    CONSTRAINT chk_attendance_times CHECK (clock_out IS NULL OR clock_out > clock_in),
+    CONSTRAINT fk_att_venue FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_att_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_att_assignment FOREIGN KEY (assignment_id) REFERENCES shift_assignments(id) ON DELETE SET NULL,
+    CONSTRAINT fk_att_updater FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_att_user_time (user_id, clock_in),
+    INDEX idx_att_venue_time (venue_id, clock_in)
 ) ENGINE=InnoDB;

@@ -1,12 +1,28 @@
-const { Router } = require('express');
+const express = require('express');
 const users = require('../controllers/user.controller');
-const { verifyToken, authorize } = require('../middlewares/auth.middleware');
+const roles = require('../controllers/role.controller');
+const site = require('../services/site.service');
+const { verifyToken, can } = require('../middlewares/auth.middleware');
 
-const router = Router();
+const router = express.Router();
 
-// RBAC: chỉ Admin quản lý tài khoản và phân quyền nhân sự
-router.use(verifyToken, authorize(['ADMIN']));
-router.get('/users', users.listUsers);
-router.post('/users', users.createInternalUser);
+// Quản trị tài khoản, vai trò: các quyền này chỉ vai trò Admin có (permissions.admin_only)
+router.use(verifyToken);
+router.get('/users', can('user.view'), users.listUsers);
+router.post('/users', can('user.manage'), users.createInternalUser);
+router.patch('/users/:id', can('user.manage'), users.setActive);
+router.patch('/users/:id/role', can('user.manage'), roles.assign);
+router.get('/venues', can('venue.view_all'), users.listAllVenues);
+router.get('/roles', can('role.manage'), roles.catalog);
+router.post('/roles', can('role.manage'), roles.create);
+router.put('/roles/:id', can('role.manage'), roles.update);
+router.delete('/roles/:id', can('role.manage'), roles.remove);
+
+// Ảnh và thông tin website. File gửi thẳng trong body, định dạng thật kiểm tra trong service.
+const imageBody = express.raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: '6mb' });
+router.put('/site/settings', can('site.manage'), async (req, res) => res.json({ settings: await site.saveSettings(req.body?.settings, req.user) }));
+router.put('/site/media/:key', can('site.manage'), imageBody, async (req, res) => res.json(await site.replaceImage(req.params.key, req.body, req.user)));
+router.patch('/site/media/:key', can('site.manage'), async (req, res) => res.json(await site.updateMeta(req.params.key, req.body || {}, req.user)));
+router.delete('/site/media/:key', can('site.manage'), async (req, res) => { await site.resetImage(req.params.key, req.user); res.json({ reset: true }); });
 
 module.exports = router;
