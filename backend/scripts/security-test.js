@@ -3,6 +3,7 @@
 //   DB_NAME=pickleball_booking_e2e ALLOWED_ORIGIN=http://localhost:5173 node scripts/security-test.js http://localhost:3000/api
 require('dotenv').config({ quiet: true });
 const mysql = require('mysql2/promise');
+const { putOnDuty } = require('./lib/duty');
 
 const BASE = process.argv[2] || 'http://localhost:3000/api';
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
@@ -119,8 +120,8 @@ async function testRoles(db, stamp) {
   expectError('Không gán được quyền không tồn tại', await roles({ name: 'Thử mã lạ', baseRole: 'STAFF', permissions: ['khong.ton.tai'] }), 400, 'VALIDATION_ERROR');
   expectError('Không cấp được quyền mình không có', await roles({ name: 'Thử leo thang', baseRole: 'STAFF', permissions: ['booking.create'] }), 403, 'CANNOT_GRANT_UNHELD');
 
-  const created = await roles({ name: `Thu ngân ${stamp}`, baseRole: 'STAFF', permissions: ['pos.sell', 'service.view', 'report.shift'] });
-  check('Tạo được vai trò Thu ngân', created.status === 201 && created.data.role.permissions.length === 3);
+  const created = await roles({ name: `Thu ngân ${stamp}`, baseRole: 'STAFF', permissions: ['pos.sell', 'service.view', 'report.shift', 'attendance.self'] });
+  check('Tạo được vai trò Thu ngân', created.status === 201 && created.data.role.permissions.length === 4);
   const cashierRole = created.data.role;
   expectError('Trùng tên vai trò bị từ chối', await roles({ name: `Thu ngân ${stamp}`, baseRole: 'STAFF', permissions: [] }), 409, 'DUPLICATE_ROLE_NAME');
 
@@ -131,6 +132,8 @@ async function testRoles(db, stamp) {
   const cashier = await tokenOf(person.email, person.password);
   const services = (await call('/venues/1/services', { token: cashier })).data.services;
   const sale = { items: [{ serviceId: services[0].id, quantity: 1 }], paymentMethod: 'CASH' };
+  expectError('Thu ngân chưa vào ca thì chưa bán được', await call('/venues/1/service-orders', { method: 'POST', token: cashier, body: sale }), 403, 'NOT_ON_DUTY');
+  await putOnDuty(BASE, { assignerToken: admin, userId: person.id, userToken: cashier, venueId: 1 });
   check('Thu ngân bán được dịch vụ', (await call('/venues/1/service-orders', { method: 'POST', token: cashier, body: sale })).status === 201);
   expectError('Thu ngân không đặt sân tại quầy được', await call('/bookings', { method: 'POST', token: cashier, body: { courtId: 1, date: dayFrom(3), start: '08:00', end: '09:00', guestName: 'Khách', guestPhone: '0912345678', paymentMethod: 'CASH' } }), 403, 'FORBIDDEN');
   expectError('Thu ngân không xem đơn cơ sở được', await call('/venues/1/bookings', { token: cashier }), 403, 'FORBIDDEN');
@@ -147,6 +150,10 @@ async function testRoles(db, stamp) {
   expectError('Quản lý đang phụ trách cơ sở không bị hạ vai trò', await call('/admin/users/2/role', { method: 'PATCH', token: admin, body: { roleId: roleOf('STAFF').id } }), 409, 'MANAGER_ASSIGNED');
   expectError('Lễ tân không tự cấp được vai trò', await call(`/admin/users/${me.id}/role`, { method: 'PATCH', token: staff, body: { roleId: roleOf('MANAGER').id } }), 403, 'FORBIDDEN');
 
+  expectError('Không đổi vai trò người đang trong ca', await call(`/admin/users/${person.id}/role`, { method: 'PATCH', token: admin, body: { roleId: roleOf('STAFF').id } }), 409, 'USER_ON_DUTY');
+  await new Promise((r) => setTimeout(r, 1100));
+  const out = await call('/shifts/me/clock-out', { method: 'POST', token: cashier });
+  check('Vai trò vừa bị gỡ quyền chấm công vẫn ra ca được', out.status === 200, JSON.stringify(out.data).slice(0, 200));
   await call(`/admin/users/${person.id}/role`, { method: 'PATCH', token: admin, body: { roleId: roleOf('STAFF').id } });
   check('Xóa được vai trò không còn ai dùng', (await call(`/admin/roles/${cashierRole.id}`, { method: 'DELETE', token: admin })).status === 200);
 
@@ -159,6 +166,7 @@ async function testMoveBooking(db) {
   const customer = await tokenOf('customer1@gmail.com');
   const manager = await tokenOf('manager.q7@pickleball.vn');
   const staff = await tokenOf('staff.q7@pickleball.vn');
+  await putOnDuty(BASE, { assignerToken: manager, userId: 3, userToken: staff });
   const date = dayFrom(4);
   const slot = { date, start: '10:00', end: '11:00' };
 

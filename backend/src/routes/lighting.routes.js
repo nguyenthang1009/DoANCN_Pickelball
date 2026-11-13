@@ -15,6 +15,7 @@ router.use(verifyToken);
 router.get('/model', can('lighting.view'), send(() => lighting.model()));
 router.get('/', can('lighting.view'), send((req) => lighting.list(req.user, req.query.venueId)));
 router.get('/energy', can('lighting.view'), send((req) => lighting.energy(req.user, req.query)));
+router.get('/discover', can('lighting.control'), send(async (req) => ({ bulbs: await lighting.discoverBulbs(req.user, req.query.venueId) })));
 router.put('/courts/:courtId/sensor', can('lighting.control'), send((req) => lighting.simulate(courtId(req), req.body || {}, req.user)));
 router.put('/courts/:courtId/mode', can('lighting.control'), send((req) => lighting.setMode(courtId(req), req.body || {}, req.user)));
 router.put('/courts/:courtId/bulb', can('lighting.control'), send((req) => lighting.setBulb(courtId(req), req.body || {}, req.user)));

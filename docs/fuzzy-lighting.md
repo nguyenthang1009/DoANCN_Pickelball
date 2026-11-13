@@ -135,6 +135,9 @@ Bộ kiểm thử đầy đủ `backend/scripts/lighting-test.js` gồm: suy lu�
 
 ## 7. Đèn Yeelight
 
+Hướng dẫn từng bước nối bóng đèn thật, kiểm tra bằng script và trình diễn: [ket-noi-den-yeelight.md](ket-noi-den-yeelight.md).
+
+- Tìm đèn: gửi M-SEARCH (SSDP) tới `239.255.255.250:1982`, đèn đã bật LAN Control trả lời kèm địa chỉ, đời máy, trạng thái. Nút "Tìm đèn trong mạng" trên màn hình và `scripts/yeelight-check.js` dùng cách này.
 - Giao thức LAN: TCP cổng 55443, mỗi lệnh là một dòng JSON. Hệ thống dùng `set_power`, `set_bright` (1–100, chuyển mượt 0,5 giây) và `start_cf` (nháy cảnh báo rồi trở lại trạng thái cũ).
 - Phải bật **LAN Control** trong app Yeelight. Một số đời bóng không có tùy chọn này, nên cần kiểm tra trước khi mua.
 - Bóng giới hạn khoảng 60 lệnh/phút cho mỗi kết nối (số liệu cộng đồng), nên hệ thống chỉ gửi khi độ sáng đổi từ 3% trở lên hoặc chuyển bật/tắt, và cách nhau ít nhất 2 giây.

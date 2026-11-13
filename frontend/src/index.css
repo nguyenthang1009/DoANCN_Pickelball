@@ -567,3 +567,30 @@ main table tbody tr:hover {
 @media (prefers-reduced-motion: reduce) {
   .court-warning, .lamp-glow { animation: none; }
 }
+
+/* Ca trực: dải trạng thái ở đầu trang nhân sự và khung chặn trang thao tác tại quầy */
+.duty-bar { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 1rem; font-size: 0.875rem; border-bottom: 1px solid; }
+@media (min-width: 1024px) { .duty-bar { padding-left: 2rem; padding-right: 2rem; } }
+.duty-bar-on { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+.duty-bar-off { background: linear-gradient(90deg, #fffbeb, #fef3c7); color: #92400e; border-color: #fde68a; }
+.duty-dot { width: 0.55rem; height: 0.55rem; border-radius: 9999px; background: #10b981; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); animation: duty-pulse 2s infinite; flex-shrink: 0; }
+.duty-bar-link { margin-left: auto; flex-shrink: 0; border-radius: 9999px; background: #0f766e; color: #fff; padding: 0.25rem 0.85rem; font-weight: 600; }
+.duty-bar-link:hover { background: #115e59; }
+.duty-gate { position: relative; overflow: hidden; }
+.duty-gate::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 5px; background: linear-gradient(90deg, #0f766e, #bef264); }
+.duty-gate-icon { display: inline-flex; width: 4rem; height: 4rem; align-items: center; justify-content: center; border-radius: 9999px; background: #f0fdfa; color: #0f766e; box-shadow: inset 0 0 0 1px #99f6e4; }
+@keyframes duty-pulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55); } 70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+@media (prefers-reduced-motion: reduce) { .duty-dot { animation: none; } }
+
+/* Cảnh báo bất thường: vạch màu theo mức độ */
+.alert-card { border-left-width: 5px; }
+.alert-high { border-left-color: #dc2626; }
+.alert-medium { border-left-color: #f59e0b; }
+.alert-low { border-left-color: #94a3b8; }
+
+/* Thẻ món dịch vụ có ảnh ở màn bán hàng */
+.service-tile { display: block; border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #fff; padding: 0.6rem; text-align: left; transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s; }
+.service-tile:hover { border-color: #0f766e; transform: translateY(-2px); box-shadow: 0 10px 20px -12px rgba(15, 118, 110, 0.45); }
+.service-tile-active { border-color: #0f766e; box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.25); }
+.service-tile-count { position: absolute; top: 0.4rem; right: 0.4rem; min-width: 1.6rem; height: 1.6rem; border-radius: 9999px; background: #0f766e; color: #fff; font-weight: 700; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; padding: 0 0.4rem; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+@media (prefers-reduced-motion: reduce) { .service-tile, .service-tile:hover { transition: none; transform: none; } }

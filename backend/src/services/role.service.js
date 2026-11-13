@@ -29,12 +29,12 @@ const ROLE_SELECT = `
 // Danh mục quyền và ma trận vai trò cho màn phân quyền
 async function catalog() {
   const [[permissions], [roles], byRole] = await Promise.all([
-    pool.query('SELECT code, module, description, admin_only FROM permissions ORDER BY sort_order'),
+    pool.query('SELECT code, module, description, admin_only, frontline, requires_shift FROM permissions ORDER BY sort_order'),
     pool.query(`${ROLE_SELECT} ORDER BY r.is_system DESC, r.id`),
     permissionsByRole(),
   ]);
   return {
-    permissions: permissions.map((p) => ({ code: p.code, module: p.module, description: p.description, adminOnly: Boolean(p.admin_only) })),
+    permissions: permissions.map((p) => ({ code: p.code, module: p.module, description: p.description, adminOnly: Boolean(p.admin_only), frontline: Boolean(p.frontline), requiresShift: Boolean(p.requires_shift) })),
     roles: roles.map((r) => toRole(r, byRole.get(r.id) || [])),
   };
 }
@@ -54,6 +54,17 @@ function assertName(name) {
 
 // Chốt chặn leo thang đặc quyền: chỉ được thêm hoặc gỡ những quyền mình đang có,
 // và quyền quản trị (admin_only) không gán được cho vai trò khác ngoài Admin
+// Quyền được cấp cho người khác: quyền mình đang có. Admin không tự dùng quyền tại quầy (đặt sân, bán hàng,
+// check-in, chấm công) nhưng vẫn là người cấp các quyền đó cho vai trò của nhân sự cơ sở.
+async function grantableBy(actor, db = pool) {
+  const codes = new Set(actor.permissions);
+  if (actor.role === 'ADMIN') {
+    const [rows] = await db.query('SELECT code FROM permissions WHERE frontline = TRUE');
+    rows.forEach((r) => codes.add(r.code));
+  }
+  return codes;
+}
+
 async function assertGrantable(codes, previous, actor, db) {
   if (!Array.isArray(codes) || codes.some((c) => typeof c !== 'string')) {
     throw new HttpError(400, 'VALIDATION_ERROR', 'permissions phải là danh sách mã quyền');
@@ -63,7 +74,8 @@ async function assertGrantable(codes, previous, actor, db) {
   if (known.length !== unique.length) throw new HttpError(400, 'VALIDATION_ERROR', 'Có mã quyền không tồn tại');
   if (known.some((p) => p.admin_only)) throw new HttpError(403, 'PERMISSION_ADMIN_ONLY', 'Quyền quản trị chỉ dành cho Admin');
   const changed = [...unique.filter((c) => !previous.includes(c)), ...previous.filter((c) => !unique.includes(c))];
-  if (changed.some((c) => !actor.permissions.includes(c))) {
+  const grantable = await grantableBy(actor, db);
+  if (changed.some((c) => !grantable.has(c))) {
     throw new HttpError(403, 'CANNOT_GRANT_UNHELD', 'Bạn chỉ được cấp hoặc gỡ những quyền mình đang có');
   }
   return unique;
@@ -138,9 +150,12 @@ async function assignToUser(userId, { roleId, venueId }, actor) {
     const target = await userService.findById(userId);
     if (!target) throw new HttpError(404, 'USER_NOT_FOUND', 'Không tìm thấy tài khoản');
     if (target.role === 'CUSTOMER') throw new HttpError(409, 'CUSTOMER_ROLE_FIXED', 'Tài khoản khách hàng không đổi sang vai trò nội bộ');
+    const [onDuty] = await conn.query('SELECT id FROM attendance_records WHERE user_id = ? AND clock_out IS NULL LIMIT 1', [userId]);
+    if (onDuty.length) throw new HttpError(409, 'USER_ON_DUTY', 'Nhân sự đang trong ca, đổi vai trò sau khi họ ra ca');
     const role = await getOrThrow(Number(roleId), conn);
     if (role.baseRole === 'CUSTOMER') throw new HttpError(400, 'VALIDATION_ERROR', 'Không gán vai trò khách hàng cho nhân sự');
-    if (role.permissions.some((c) => !actor.permissions.includes(c))) {
+    const grantable = await grantableBy(actor, conn);
+    if (role.permissions.some((c) => !grantable.has(c))) {
       throw new HttpError(403, 'CANNOT_GRANT_UNHELD', 'Vai trò này có quyền mà bạn không có');
     }
 

@@ -2,6 +2,7 @@ const express = require('express');
 const users = require('../controllers/user.controller');
 const roles = require('../controllers/role.controller');
 const site = require('../services/site.service');
+const activity = require('../services/activity.service');
 const { verifyToken, can } = require('../middlewares/auth.middleware');
 
 const router = express.Router();
@@ -12,6 +13,13 @@ router.get('/users', can('user.view'), users.listUsers);
 router.post('/users', can('user.manage'), users.createInternalUser);
 router.patch('/users/:id', can('user.manage'), users.setActive);
 router.patch('/users/:id/role', can('user.manage'), roles.assign);
+router.patch('/users/:id/profile', can('user.manage'), users.updateProfile);
+router.post('/users/:id/reset-password', can('user.manage'), users.resetPassword);
+
+// Nhật ký hoạt động và cảnh báo bất thường của nhân sự
+router.get('/activity', can('audit.view'), async (req, res) => res.json(await activity.list(req.query)));
+router.get('/activity/filters', can('audit.view'), async (req, res) => res.json(await activity.filters()));
+router.get('/activity/alerts', can('audit.view'), async (req, res) => res.json(await activity.alerts(req.query)));
 router.get('/venues', can('venue.view_all'), users.listAllVenues);
 router.get('/roles', can('role.manage'), roles.catalog);
 router.post('/roles', can('role.manage'), roles.create);

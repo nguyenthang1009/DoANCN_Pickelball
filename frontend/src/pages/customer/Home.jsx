@@ -22,6 +22,8 @@ const COURT_TYPES = [['ALL', 'Tất cả sân'], ['OUTDOOR', 'Ngoài trời'], [
 // Màn ma trận chọn sân: chọn cơ sở, ngày, kéo chọn các ô liền nhau trên một sân rồi giữ chỗ
 export default function Home() {
   const { user } = useAuth();
+  // Nhân sự và Admin không đặt sân như khách: tránh tự giữ chỗ cho mình hay người quen mà không qua quầy
+  const internal = Boolean(user && user.role !== 'CUSTOMER');
   const { notify } = useFeedback();
   const { media } = useSite();
   const navigate = useNavigate();
@@ -163,6 +165,7 @@ export default function Home() {
               <p className="text-sm text-slate-600">
                 {picked[0].start} – {picked.at(-1).end} · {picked.length} ô
                 {tooShort && <span className="ml-2 text-red-700">Cần đặt tối thiểu {limits.minMinutes} phút</span>}
+                {internal && <span className="ml-2 block text-amber-700 sm:inline">Tài khoản nội bộ chỉ xem lịch. Đặt cho khách ở mục Đặt tại quầy, trong ca trực.</span>}
               </p>
             </div>
             <div className="flex items-center gap-6">
@@ -171,7 +174,7 @@ export default function Home() {
                 <p className="text-xl font-semibold">{vnd(total)}</p>
               </div>
               <Button kind="ghost" onClick={() => setSelection(null)}>Bỏ chọn</Button>
-              <Button onClick={hold} loading={holding} disabled={tooShort}>Giữ chỗ {limits?.holdMinutes} phút</Button>
+              <Button onClick={hold} loading={holding} disabled={tooShort || internal}>Giữ chỗ {limits?.holdMinutes} phút</Button>
             </div>
           </div>
         </div>

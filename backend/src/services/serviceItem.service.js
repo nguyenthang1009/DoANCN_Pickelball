@@ -1,3 +1,6 @@
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 const pool = require('../config/db');
 const HttpError = require('../utils/httpError');
 const withTransaction = require('../utils/transaction');
@@ -5,6 +8,9 @@ const audit = require('./audit.service');
 
 // Danh mục dịch vụ bán tại quầy (bảng services): nước uống, thuê vợt, bóng...
 const CATEGORIES = ['DRINK', 'EQUIPMENT', 'OTHER'];
+// Ảnh món lưu trên máy chủ, tên file ngẫu nhiên; chỉ nhận JPG, PNG, WebP kiểm tra bằng chữ ký file
+const IMAGE_DIR = path.join(__dirname, '..', '..', 'uploads', 'services');
+const IMAGE_PREFIX = '/uploads/services/';
 
 function toItem(row) {
   return {
@@ -14,6 +20,7 @@ function toItem(row) {
     category: row.category,
     unit: row.unit,
     unitPrice: row.unit_price,
+    imageUrl: row.image_url ?? null,
     isActive: Boolean(row.is_active),
   };
 }
@@ -83,4 +90,31 @@ async function update(item, patch, actor) {
   });
 }
 
-module.exports = { list, getOrThrow, create, update };
+const removeFile = (url) => {
+  if (url && url.startsWith(IMAGE_PREFIX)) fs.promises.unlink(path.join(IMAGE_DIR, path.basename(url))).catch(() => {});
+};
+
+// Đổi ảnh món: ảnh cũ bị xóa khỏi máy chủ sau khi lưu ảnh mới
+async function setImage(item, buffer, actor) {
+  if (!Buffer.isBuffer(buffer) || !buffer.length) throw new HttpError(400, 'VALIDATION_ERROR', 'Chưa có file ảnh');
+  const ext = require('./site.service').detectImageType(buffer);
+  if (!ext) throw new HttpError(415, 'UNSUPPORTED_IMAGE', 'Chỉ nhận ảnh JPG, PNG hoặc WebP');
+  await fs.promises.mkdir(IMAGE_DIR, { recursive: true });
+  const url = `${IMAGE_PREFIX}${crypto.randomBytes(12).toString('hex')}.${ext}`;
+  await fs.promises.writeFile(path.join(IMAGE_DIR, path.basename(url)), buffer);
+  const old = await getOrThrow(item.id);
+  await pool.query('UPDATE services SET image_url = ? WHERE id = ?', [url, item.id]);
+  removeFile(old.imageUrl);
+  await audit.log(pool, { actorId: actor.id, venueId: item.venueId, actionType: 'UPDATE_SERVICE_IMAGE', entityType: 'SERVICE', entityId: item.id, newValues: { name: item.name, imageUrl: url } });
+  return getOrThrow(item.id);
+}
+
+async function removeImage(item, actor) {
+  const old = await getOrThrow(item.id);
+  await pool.query('UPDATE services SET image_url = NULL WHERE id = ?', [item.id]);
+  removeFile(old.imageUrl);
+  await audit.log(pool, { actorId: actor.id, venueId: item.venueId, actionType: 'REMOVE_SERVICE_IMAGE', entityType: 'SERVICE', entityId: item.id, oldValues: { imageUrl: old.imageUrl } });
+  return getOrThrow(item.id);
+}
+
+module.exports = { list, getOrThrow, create, update, setImage, removeImage, IMAGE_DIR };

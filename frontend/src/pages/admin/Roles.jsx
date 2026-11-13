@@ -3,7 +3,7 @@ import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useFeedback } from '../../lib/feedback';
 import PageHeader from '../../components/PageHeader';
-import { Alert, Button, Card, Input, Select, Spinner } from '../../components/ui';
+import { Alert, Badge, Button, Card, Input, Select, Spinner } from '../../components/ui';
 
 const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
 
@@ -30,7 +30,9 @@ export default function Roles() {
   }, [data]);
 
   const changed = data ? data.roles.filter((r) => !sameSet(draft[r.id] || [], r.permissions)) : [];
-  const locked = (role, permission) => role.code === 'ADMIN' || role.id === me.roleId || permission.adminOnly || !me.permissions.includes(permission.code);
+  // Admin không tự dùng quyền tại quầy nhưng vẫn cấp được cho vai trò của nhân sự cơ sở
+  const grantable = (permission) => me.permissions.includes(permission.code) || (me.role === 'ADMIN' && permission.frontline);
+  const locked = (role, permission) => role.code === 'ADMIN' || role.id === me.roleId || permission.adminOnly || !grantable(permission);
   const toggle = (role, code) => setDraft((d) => ({ ...d, [role.id]: d[role.id].includes(code) ? d[role.id].filter((c) => c !== code) : [...d[role.id], code] }));
 
   async function run(fn, ok) {
@@ -85,7 +87,14 @@ export default function Roles() {
               <tr className="border-t border-slate-200 bg-slate-50"><th colSpan={data.roles.length + 1} className="sticky left-0 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">{module}</th></tr>
               {permissions.map((p) => (
                 <tr key={p.code} className="border-t border-slate-200">
-                  <td className="sticky left-0 bg-white px-4 py-2">{p.description}<div className="text-xs text-slate-600">{p.code}</div></td>
+                  <td className="sticky left-0 bg-white px-4 py-2">
+                    {p.description}
+                    <div className="flex flex-wrap items-center gap-1 text-xs text-slate-600">
+                      {p.code}
+                      {p.frontline && <Badge tone="teal">Tại quầy</Badge>}
+                      {p.requiresShift && <Badge tone="amber">Cần đang trong ca</Badge>}
+                    </div>
+                  </td>
                   {data.roles.map((r) => (
                     <td key={r.id} className="px-3 py-2 text-center">
                       <input

@@ -4,6 +4,7 @@
 require('dotenv').config({ quiet: true });
 const crypto = require('crypto');
 const mysql = require('mysql2/promise');
+const { putOnDuty } = require('./lib/duty');
 
 const BASE = process.argv[2] || 'http://localhost:3000/api';
 // Server thử phải chạy với cùng PAYOS_CHECKSUM_KEY để test ký được webhook giống PayOS
@@ -49,6 +50,8 @@ async function hold(token, courtId, date, w) {
 
   const customer = await login('customer1@gmail.com');
   const staff = await login('staff.q7@pickleball.vn');
+  // Check-in, đặt tại quầy chỉ làm được trong ca trực
+  await putOnDuty(BASE, { assignerToken: await login('manager.q7@pickleball.vn'), userId: 3, userToken: staff });
   const stamp = String(Date.now()).slice(-7);
   const reg = await call('/auth/register', { method: 'POST', body: { fullName: 'Khách thứ hai', email: `pay${stamp}@test.vn`, phone: `05${stamp}0`, password: 'matkhau123' } });
   const customer2 = reg.data.token;

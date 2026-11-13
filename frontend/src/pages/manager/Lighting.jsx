@@ -68,7 +68,38 @@ function Slider({ label, value, min, max, step, disabled, onChange, suffix }) {
   );
 }
 
-function CourtCard({ court, canControl, selected, onSelect, onSensor, onMode, onBulb }) {
+// Tìm đèn Yeelight trong mạng nội bộ để chọn, khỏi phải tự dò địa chỉ IP
+function BulbFinder({ venueQuery, onPick }) {
+  const [state, setState] = useState(null); // null: chưa tìm, 'loading', hoặc danh sách đèn
+  const [error, setError] = useState('');
+  async function find() {
+    setState('loading');
+    setError('');
+    try { setState((await api(`/lighting/discover${venueQuery}`)).bulbs); } catch (e) { setError(e.message); setState(null); }
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <button type="button" className="self-start text-xs font-semibold text-teal-700 hover:underline disabled:opacity-50" disabled={state === 'loading'} onClick={find}>
+        {state === 'loading' ? 'Đang tìm đèn trong mạng…' : 'Tìm đèn trong mạng'}
+      </button>
+      {error && <p className="text-xs text-red-700">{error}</p>}
+      {Array.isArray(state) && (state.length === 0 ? (
+        <p className="text-xs text-amber-700">Không thấy đèn nào. Kiểm tra đèn đã bật LAN Control trong app Yeelight và máy chủ cùng mạng Wi-Fi với đèn.</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {state.map((b) => (
+            <button key={b.ip} type="button" onClick={() => onPick(b.ip)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-left text-xs hover:border-teal-700">
+              <span className="font-semibold">{b.ip}</span> · {b.name || b.model || 'Yeelight'} · {b.power === 'on' ? `bật ${b.bright}%` : 'tắt'}
+              {b.assignedTo && <span className="block text-slate-600">Đang gán: {b.assignedTo}</span>}
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CourtCard({ court, canControl, selected, onSelect, onSensor, onMode, onBulb, venueQuery }) {
   const [tone, label] = STATE[court.state];
   const [draft, setDraft] = useState(null);
   const [ip, setIp] = useState(court.bulb?.ip ?? '');
@@ -97,6 +128,7 @@ function CourtCard({ court, canControl, selected, onSelect, onSensor, onMode, on
           <Badge tone={tone}>{label}</Badge>
           {court.warning && <Badge tone="red">Có người, chưa đặt sân</Badge>}
           {court.mode === 'MANUAL' && <Badge tone="teal">Thủ công</Badge>}
+          {court.manualLimited && <Badge tone="amber">Giữ sáng cho khách</Badge>}
         </div>
       </div>
       <div className="flex items-center gap-4">
@@ -128,6 +160,7 @@ function CourtCard({ court, canControl, selected, onSelect, onSensor, onMode, on
           <Button kind="secondary" type="submit" className="h-11">Lưu</Button>
         </form>
       )}
+      {canControl && <BulbFinder venueQuery={venueQuery} onPick={setIp} />}
       {court.bulb?.error && <p className="text-xs text-red-700">{court.bulb.error}</p>}
     </Card>
   );
@@ -173,7 +206,11 @@ function Inference({ court, model }) {
       </div>
       <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
         Trọng tâm vùng gộp = <b>{fmt(court.centroid, 1)}%</b>{court.centroid < model.offThreshold ? ` (dưới ngưỡng ${model.offThreshold}% nên tắt hẳn)` : ''}
-        {court.mode === 'MANUAL' ? <> · đang ở chế độ thủ công nên đèn dùng <b>{court.level}%</b></> : <> → đèn sáng <b>{court.level}%</b></>}
+        {court.mode === 'MANUAL'
+          ? court.manualLimited
+            ? <> · chỉnh tay {court.manualLevel}% thấp hơn mức cần khi đang có khách chơi, nên đèn giữ <b>{court.level}%</b> (chỉnh tay chỉ tăng sáng được)</>
+            : <> · đang ở chế độ thủ công nên đèn dùng <b>{court.level}%</b></>
+          : <> → đèn sáng <b>{court.level}%</b></>}
       </p>
     </Card>
   );
@@ -254,7 +291,7 @@ export default function Lighting() {
           </div>
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
             {data.courts.map((c) => (
-              <CourtCard key={c.courtId} court={c} canControl={canControl} selected={c.courtId === selected} onSelect={setSelected} onSensor={onSensor} onMode={onMode} onBulb={onBulb} />
+              <CourtCard key={c.courtId} court={c} canControl={canControl} selected={c.courtId === selected} onSelect={setSelected} onSensor={onSensor} onMode={onMode} onBulb={onBulb} venueQuery={venueQuery} />
             ))}
           </div>
           {court && <Inference court={court} model={model} />}

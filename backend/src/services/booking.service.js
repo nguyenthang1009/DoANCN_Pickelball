@@ -194,9 +194,12 @@ async function createBooking(actor, body, { extra } = {}) {
   const court = await courtService.getOrThrow(courtId);
   const venue = await venueService.getOrThrow(court.venueId);
   const isPos = actor.role !== 'CUSTOMER';
+  // Đặt sân ảnh hưởng trực tiếp doanh thu: Admin chỉ giám sát, không tự đặt sân cho ai
+  if (actor.role === 'ADMIN') throw new HttpError(403, 'ADMIN_NO_FRONTLINE', 'Tài khoản quản trị không đặt sân, bán hàng hay check-in. Việc này do nhân sự cơ sở làm trong ca trực.');
   if (!actor.permissions.includes(isPos ? 'pos.create' : 'booking.create')) {
     throw new HttpError(403, 'FORBIDDEN', 'Bạn không có quyền thực hiện chức năng này');
   }
+  if (isPos) await require('./shift.service').assertOnDuty(actor);
   if (isPos && actor.role !== 'ADMIN' && actor.venueId !== court.venueId) {
     throw new HttpError(403, 'FORBIDDEN', 'Bạn chỉ được đặt sân tại cơ sở của mình');
   }
@@ -289,6 +292,8 @@ async function cancelBooking(code, user, { reason } = {}) {
         if (hoursLeft < deadlineHours) {
           throw new HttpError(409, 'CANCEL_DEADLINE_PASSED', `Chỉ hủy online được trước giờ chơi ít nhất ${deadlineHours} giờ, vui lòng liên hệ cơ sở`);
         }
+      } else if (vnTimestamp(booking.bookingDate, booking.startTime) <= Date.now()) {
+        throw new HttpError(409, 'BOOKING_STARTED', 'Đơn đã tới giờ chơi, không hủy được vì khách có thể đang ở trên sân. Khách không đến thì hệ thống tự ghi nhận vắng mặt sau giờ kết thúc');
       } else if (typeof reason !== 'string' || !reason.trim()) {
         throw new HttpError(400, 'VALIDATION_ERROR', 'Cần nhập lý do hủy đơn đã thanh toán');
       }
@@ -322,13 +327,15 @@ async function courtImpact(court) {
       ORDER BY b.booking_date, b.id`,
     [court.id, now.date, now.date, now.time],
   );
-  const bookings = await hydrate(rows);
+  // Đơn đã tới giờ chơi không nằm trong danh sách hủy hay đổi sân: khách có thể đang ở trên sân
+  const bookings = (await hydrate(rows)).filter((b) => vnTimestamp(b.bookingDate, b.startTime) > Date.now());
+  const playing = await courtService.activeBookingOn(court.id);
   const others = (await courtService.listByVenue(court.venueId)).filter((c) => c.id !== court.id && c.status === 'ACTIVE');
   const occupiedByDate = new Map();
   for (const date of new Set(bookings.map((b) => b.bookingDate))) {
     occupiedByDate.set(date, await availabilityService.occupiedSlots(court.venueId, date));
   }
-  return bookings.map((b) => {
+  const list = bookings.map((b) => {
     const occupied = occupiedByDate.get(b.bookingDate);
     const free = (c) => b.slots.every((s) => !occupied.has(`${c.id}_${toMinutes(s.startTime)}`));
     return {
@@ -336,6 +343,7 @@ async function courtImpact(court) {
       startTime: b.startTime, endTime: b.endTime, paymentStatus: b.paymentStatus, alternatives: others.filter(free).map((c) => ({ id: c.id, name: c.name })),
     };
   });
+  return { bookings: list, playing };
 }
 
 // BR17: đổi đơn sang sân khác cùng cơ sở, giữ nguyên giá đã chốt. Khóa UNIQUE active_slot_lock chặn đổi vào ô đã có người.
@@ -350,6 +358,9 @@ async function moveBooking(code, { courtId }, actor) {
     const fresh = await findByCode(code, conn);
     if (!['PENDING_PAYMENT', 'PAID'].includes(fresh.paymentStatus) || fresh.checkinStatus !== 'PENDING') {
       throw new HttpError(409, 'CANNOT_MOVE', 'Đơn ở trạng thái hiện tại không đổi sân được');
+    }
+    if (vnTimestamp(fresh.bookingDate, fresh.startTime) <= Date.now()) {
+      throw new HttpError(409, 'BOOKING_STARTED', 'Đơn đã tới giờ chơi, không đổi sân được vì khách có thể đang ở trên sân');
     }
     const target = await courtService.getOrThrow(targetId, conn);
     if (target.venueId !== fresh.venueId) throw new HttpError(400, 'VALIDATION_ERROR', 'Chỉ đổi sang sân cùng cơ sở');

@@ -59,14 +59,15 @@ DB_NAME=pickleball_booking node scripts/payment-test.js http://localhost:3000/ap
 | --- | --- | --- | --- | --- |
 | Xem lịch trống | Có | Có | Có | Có |
 | Đặt online, thanh toán VietQR | Có | — | — | — |
-| Đặt tại quầy, bán dịch vụ | 403 | Cơ sở mình | Cơ sở mình | Mọi cơ sở |
-| Check-in QR | 403 | Cơ sở mình | Cơ sở mình | Mọi cơ sở |
+| Đặt tại quầy, bán dịch vụ | 403 | Cơ sở mình, đang trong ca | Cơ sở mình, đang trong ca | 403 (chỉ giám sát) |
+| Check-in QR | 403 | Cơ sở mình, đang trong ca | Cơ sở mình, đang trong ca | 403 (chỉ giám sát) |
 | Hủy đơn đã thanh toán | Trước 24 giờ | 403 | Có (cần lý do) | Có |
 | Xác nhận hoàn tiền | 403 | 403 | Cơ sở mình | Mọi cơ sở |
 | Doanh thu ca | 403 | Ca của mình | Cả cơ sở | Toàn hệ thống |
 | Dashboard doanh thu | 403 | 403 | Cơ sở mình (bỏ qua `venueId` khác) | Toàn chuỗi, so sánh cơ sở |
 | Sân con, bảng giá, dịch vụ | 403 | 403 | Cơ sở mình | Mọi cơ sở |
 | Cụm sân, tài khoản, khóa tài khoản | 403 | 403 | 403 | Có (không tự khóa mình) |
+| Nhật ký hoạt động, cảnh báo bất thường | 403 | 403 | 403 | Có |
 
 Giao diện chặn cùng ma trận này: mỗi vai trò chỉ thấy mục menu của mình; gõ thẳng URL trang không được phép sẽ bị đưa về trang chủ của vai trò. Tài khoản nội bộ mới bị giữ ở trang đổi mật khẩu cho tới khi đổi xong.
 
@@ -160,7 +161,20 @@ Lỗi phát hiện và đã sửa:
 | Lệnh xuống đèn bị gửi hai lần, nhật ký ghi trùng | `lighting-test.js` khi chạy cả bộ | Vòng điều khiển định kỳ và thao tác trên màn hình cùng tính lại một cơ sở. Nay mỗi cơ sở chỉ tính một lần tại một thời điểm. Thử lại với 10 yêu cầu cùng lúc và vòng điều khiển 1 giây: đèn nhận đúng một lượt lệnh; chạy bộ kiểm thử 3 lần liền đều 51/51 |
 | Mở trang chiếu sáng khoảng một phút thì bị đẩy ra trang đăng nhập, đăng nhập lại báo "thao tác quá nhanh" | Người dùng thử thật | Đọc danh sách đèn cũng phát sự kiện "đèn đã đổi", trang nhận được lại đọc tiếp nên thành vòng lặp vô hạn, vượt 600 request/phút. Đồng thời làm mới phiên bị chặn 429 bị hiểu nhầm là phiên hết hạn. Sửa: chỉ phát khi thật sự có thay đổi hoặc vừa có thao tác ghi; trang gom thông báo trong 1,5 giây; 429 hay mất mạng không đăng xuất; số đo cảm biến có giới hạn riêng. Thêm 3 kiểm tra; đo lại trên trình duyệt: 16 request trong 40 giây |
 
-Chưa thử với đèn Yeelight thật, cảm biến BH1750 và camera.
+Thử với đèn thật ngày 12/11/2026: bóng Yeelight đời `color4`, bật LAN Control trong app Yeelight.
+
+| Bước | Kết quả |
+| --- | --- |
+| Tìm đèn trong mạng (`yeelight-check.js`, nút "Tìm đèn trong mạng") | Tìm thấy, đọc được IP, đời máy, trạng thái |
+| Bật 10%, 50%, 100%, nháy cảnh báo, trả về trạng thái cũ | Đạt; đèn trả lời trong 100–175 ms |
+| 7 tình huống Fuzzy đẩy xuống đèn (93%, 50%, 60%, tắt, 25%, 15% kèm nháy, tắt) | Đạt 7/7 |
+| Gán đèn cho Sân 01 trên web, đặt mức hoạt động 6 khi không có đơn | Đèn thật sáng 15% và nháy, đọc lại từ đèn đúng 15% |
+
+Lỗi phát hiện và đã sửa: một lần đèn trả lời chậm quá 1,5 giây ngay sau khi nháy cảnh báo (Wi-Fi chập chờn), lệnh bị báo lỗi. Sửa: chờ tối đa 3 giây và tự gửi lại một lần; đèn từ chối lệnh thì không gửi lại. Chạy lại 7/7 tình huống đạt, bộ kiểm thử chiếu sáng 54/54.
+
+Lỗi người dùng gặp khi thử: kéo thanh trượt thì đèn tắt bật liên tục rồi mất kết nối. Nguyên nhân: cùng một bóng được gán cho Sân 01 (không có đơn, Fuzzy bảo tắt) và Sân 02 (có khách, Fuzzy bảo sáng 93%); mỗi lần tính lại, hai sân gửi lệnh ngược nhau, bóng bị dồn lệnh quá giới hạn và từ chối. Sửa: một bóng chỉ gán cho một sân (kiểm tra ở máy chủ và ràng buộc duy nhất trong CSDL); nháy cảnh báo tối đa một lần mỗi 30 giây; báo rõ khi bóng từ chối vì quá nhiều lệnh. Thử lại trên đèn thật: kéo thanh mức hoạt động 12 lần trong 4 giây, đèn vẫn giữ kết nối, dừng ở 15% đúng mức; kéo ánh sáng lên 800 lux thì đèn tắt; gán bóng cho sân thứ hai bị chặn. Bộ kiểm thử chiếu sáng 55/55.
+
+Chưa thử cảm biến ánh sáng BH1750 và camera; ánh sáng môi trường và mức hoạt động vẫn lấy từ thanh trượt hoặc script giả lập thiết bị IoT.
 
 ## 8. Ca làm, chấm công, lương theo hình thức
 
@@ -215,7 +229,74 @@ Lỗi phát hiện và đã sửa:
 | Lớp ExponentialSmoothing của statsmodels lệch ở ngày dự báo thứ 7, 14, 21, 28 | Đối chiếu statsmodels | Không phải lỗi của hệ thống: thư viện lấy mùa vụ chu kỳ trước. Đối chiếu thêm với ETSModel theo đúng công thức FPP3 thì trùng khớp, dùng ETSModel làm mốc |
 | Bảng đánh giá mô hình xuống dòng giữa số và đơn vị | Xem giao diện thật | Giữ số trên một dòng |
 
-## 10. Chưa kiểm thử được
+## 10. Kiểm soát thao tác nhân sự, ca trực, nhật ký hoạt động
+
+`scripts/operations-test.js`: 47 kiểm tra, đạt hết. Chạy lại toàn bộ trên CSDL vừa khởi tạo: Postman 28 + 66 + 86 assertion, race 2 vòng, payment 20, security 63, finance 130, lighting 55, shift 85, forecast 30, operations 47, đạt hết. Collection `booking-pos` chạy sau `scripts/setup-duty.js` (cho lễ tân, quản lý vào ca).
+
+| Kịch bản | Kỳ vọng | Kết quả |
+| --- | --- | --- |
+| Admin đặt sân tại quầy | `403 ADMIN_NO_FRONTLINE` | Đạt |
+| Admin bán dịch vụ, check-in, vào ca | `403 FORBIDDEN` | Đạt |
+| Admin cấp quyền đặt tại quầy, check-in cho vai trò nhân sự mới | Tạo được | Đạt |
+| Lễ tân chưa vào ca đặt tại quầy, bán dịch vụ, check-in | `403 NOT_ON_DUTY` | Đạt |
+| Khách đặt online, thanh toán | Không bị ảnh hưởng | Đạt |
+| Vào ca khi chưa được xếp ca | `409 NO_ASSIGNED_SHIFT` | Đạt |
+| Vào ca khi ca được xếp là ngày mai | `409`, thông báo tên ca và giờ ca tới | Đạt |
+| Ca vừa hết giờ, chưa ra ca, đặt tại quầy | `403 NOT_ON_DUTY` | Đạt |
+| Ra ca muộn | Giờ ra ca ghi đúng giờ hết ca | Đạt |
+| Quên ra ca | Tác vụ nền tự kết thúc tại giờ hết ca, đánh dấu `auto_closed` | Đạt |
+| Vào ca sớm 14 phút | Giờ công tính từ giờ bắt đầu ca | Đạt |
+| Nhật ký ghi đăng nhập (cả sai), vào/ra ca, tự kết thúc ca, đặt tại quầy, bán hàng | Có đủ, có người thực hiện và mã đơn | Đạt |
+| Lọc nhật ký theo nhân sự, tìm theo mã đơn; quản lý xem nhật ký | Lọc đúng; quản lý `403` | Đạt |
+| Sửa hoặc xóa `audit_logs` trực tiếp trong MySQL | Trigger chặn | Đạt |
+| Lễ tân đặt tại quầy cho số điện thoại của chính mình | Cảnh báo mức cao `STAFF_PHONE` | Đạt |
+| Đơn tại quầy đã thu tiền mặt bị hủy | Cảnh báo `POS_CANCELLED` | Đạt |
+| Ảnh món: lễ tân đổi ảnh; file SVG đổi đuôi PNG | `403`; `415 UNSUPPORTED_IMAGE` | Đạt |
+| Quản lý thêm ảnh, màn bán hàng nhận ảnh, gỡ ảnh | Đúng | Đạt |
+| Admin sửa nhân sự; SĐT sai; chuyển cơ sở khi đang trong ca; quản lý sửa | Lưu được; `400`; `409 USER_ON_DUTY`; `403` | Đạt |
+| Đặt lại mật khẩu | Mật khẩu cũ hết hiệu lực, đăng nhập bằng mật khẩu tạm phải đổi ngay | Đạt |
+| Xóa bảng lương nháp; bảng đã duyệt; lễ tân xóa | Xóa được; `409 PAYROLL_LOCKED`; `403` | Đạt |
+| Giao diện: lễ tân chưa vào ca, đang trong ca; Admin mở POS; nhật ký, cảnh báo; sửa nhân sự; ảnh món | Thẻ "Chưa vào ca trực", thanh "Đang trong ca", thẻ "Không có quyền truy cập", ảnh hiện ở màn bán hàng, không lỗi console | Đạt khi thử thật |
+
+Lỗi phát hiện và đã sửa:
+
+| Lỗi | Phát hiện bởi | Cách sửa |
+| --- | --- | --- |
+| Ca bị dời giờ sau khi nhân viên đã vào ca làm giờ hết ca rơi trước giờ vào: ra ca báo "Vừa vào ca" mãi, tác vụ tự kết thúc ca vi phạm ràng buộc `chk_attendance_times` | `operations-test.js` | Lượt đó được đóng ngay sau giờ vào ca (không tính công) thay vì kẹt lượt mở |
+| Nhật ký đổi ảnh món hiện `SERVICE #3` | Xem giao diện thật | Hiện tên món |
+
+### Bảo vệ khách đang chơi khi xóa, sửa
+
+Thêm vào `operations-test.js` (tổng 63 kiểm tra) và `security-test.js` (tổng 65), đạt hết. Chạy lại toàn bộ: Postman 28 + 66 + 86, race 2 vòng, payment 16 (bỏ qua bước nhận sân thật vì chạy sau 21 giờ không còn khung trống trong 30 phút tới, phụ thuộc giờ chạy), security 65, finance 130, lighting 55, shift 85, forecast 30, operations 63.
+
+| Kịch bản | Kỳ vọng | Kết quả |
+| --- | --- | --- |
+| Đặt bảo trì hoặc ngừng sân khi khách đang chơi | `409 COURT_IN_USE`, đơn của khách giữ nguyên `PAID` | Đạt |
+| Xem trước bảo trì khi khách đang chơi | Trả `playing` (mã đơn, giờ kết thúc); đơn đang chơi không nằm trong danh sách hủy, đổi sân | Đạt |
+| Hủy, đổi sân đơn đã tới giờ chơi | `409 BOOKING_STARTED` | Đạt |
+| Chỉnh đèn tay 0% khi khách đang chơi | Đèn giữ mức Fuzzy, `manualLimited = true`; chỉnh 100% vẫn được | Đạt |
+| Tạm ngừng cơ sở còn đơn sắp tới | `409 VENUE_HAS_BOOKINGS` | Đạt |
+| Đổi giờ mở cửa làm đơn đã đặt nằm ngoài giờ | `409 BOOKINGS_OUTSIDE_HOURS` | Đạt |
+| Xóa một khung giá (gộp vào khung liền trước) | Lưu được, bớt một khung | Đạt |
+| Xóa khung để hở giờ | `400 INVALID_PRICE_RULES` | Đạt |
+| Đổi bảng giá khi đã có đơn | Đơn giữ nguyên `price_snapshot`; API trả `keptSlots` | Đạt |
+| Đổi vai trò người đang trong ca | `409 USER_ON_DUTY` | Đạt |
+| Khóa tài khoản đang trong ca | Lượt chấm công kết thúc ngay | Đạt |
+| Vai trò vừa bị gỡ quyền chấm công bấm ra ca | Ra ca được | Đạt |
+| Giao diện: xóa khung giá, hộp bảo trì khi sân có khách, đơn đã tới giờ ở Đơn trong ngày | Hộp xác nhận ghi khung trước và sau khi gộp; nút bảo trì khóa kèm giờ khách chơi xong; thay nút Hủy bằng "Đã tới giờ chơi" | Đạt khi thử thật |
+
+Lỗi phát hiện và đã sửa:
+
+| Lỗi | Phát hiện bởi | Cách sửa |
+| --- | --- | --- |
+| Đặt bảo trì khi đơn đang chơi dở: các ô còn lại khớp điều kiện "sắp tới" nên cả đơn bị hủy, chuyển chờ hoàn tiền, đèn có thể tắt khi khách đang chơi | Rà soát nghiệp vụ | Chặn đóng sân khi có khách đang chơi; danh sách đơn bị ảnh hưởng bỏ đơn đã tới giờ |
+| Quản lý hủy được đơn đã thanh toán sau giờ bắt đầu chơi | Rà soát nghiệp vụ | Chỉ hủy trước giờ chơi |
+| Chế độ đèn thủ công 0% tắt đèn sân đang có khách | Rà soát nghiệp vụ | Đang có khách thì không giảm dưới mức Fuzzy |
+| Tạm ngừng cơ sở, đổi giờ mở cửa không kiểm tra đơn đã đặt | Rà soát nghiệp vụ | Chặn khi còn đơn bị ảnh hưởng |
+| Admin gỡ quyền chấm công của vai trò khi người đó đang trong ca: người đó không ra ca được (403) | `security-test.js` | Ra ca chỉ cần đang có lượt mở |
+| Nút ✕ xóa khung giá chỉ bỏ dòng, để hở giờ nên lưu bị lỗi; nút "Thêm khung giờ" tạo khung trùng cả ngày; hộp lưu giá dùng `confirm` của trình duyệt; dòng khung giá tràn khỏi thẻ khi ô giờ hiện AM/PM | Thử giao diện | Xóa thì gộp vào khung bên cạnh, thêm thì chia đôi khung dài nhất, dùng hộp xác nhận của hệ thống, dòng tự xuống hàng |
+
+## 11. Chưa kiểm thử được
 
 - **PayOS thật**: chưa có `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`. Cách ký chữ ký làm theo SDK chính thức của payOS; cần chạy thử với tài khoản PayOS sandbox trước khi demo.
 - **Quét QR bằng camera**: trình duyệt kiểm thử không có camera; đã kiểm luồng nhập mã tay và API quét QR (`/checkin/lookup` với chuỗi QR).

@@ -119,7 +119,7 @@ INSERT INTO permissions (code, module, description, admin_only, sort_order) VALU
 
 -- Admin có mọi quyền nghiệp vụ nội bộ
 INSERT INTO role_permissions (role_id, permission_code)
-SELECT 1, code FROM permissions WHERE code NOT IN ('booking.create', 'booking.view_own', 'booking.cancel_own');
+SELECT 1, code FROM permissions WHERE code NOT IN ('booking.create', 'booking.view_own', 'booking.cancel_own', 'pos.create', 'pos.sell', 'checkin.perform');
 INSERT INTO role_permissions (role_id, permission_code)
 SELECT 2, code FROM permissions WHERE code IN ('pos.create', 'pos.sell', 'checkin.perform', 'booking.view_venue', 'report.shift', 'service.view', 'booking.cancel', 'booking.move', 'booking.refund', 'court.manage', 'price.manage', 'service.manage', 'report.revenue', 'staff.view');
 INSERT INTO role_permissions (role_id, permission_code)
@@ -227,7 +227,7 @@ INSERT INTO permissions (code, module, description, admin_only, sort_order) VALU
 ('attendance.self', 'Ca làm', 'Tự vào ca, ra ca và xem lịch ca của mình', 0, 43);
 
 INSERT INTO role_permissions (role_id, permission_code) VALUES
-(1, 'shift.manage'), (1, 'attendance.self'), (2, 'shift.manage'), (2, 'attendance.self'), (3, 'attendance.self');
+(1, 'shift.manage'), (2, 'shift.manage'), (2, 'attendance.self'), (3, 'attendance.self');
 
 INSERT INTO legal_parameters (code, label, value, unit, effective_from, effective_to, legal_ref) VALUES
 ('MIN_HOURLY_WAGE_REGION_1', 'Lương tối thiểu giờ vùng I', 25500, 'VND', '2026-01-01', NULL, 'Nghị định 293/2025/NĐ-CP'),
@@ -262,3 +262,13 @@ INSERT INTO shift_templates (venue_id, name, start_time, end_time) VALUES
 INSERT INTO permissions (code, module, description, admin_only, sort_order) VALUES
 ('forecast.view', 'Báo cáo', 'Xem dự báo doanh thu và tăng trưởng', 1, 44);
 INSERT INTO role_permissions (role_id, permission_code) VALUES (1, 'forecast.view');
+
+-- 17. Kiểm soát thao tác tại quầy: Admin không đặt sân, bán hàng, check-in; nhân sự chỉ thao tác khi đang trong ca
+UPDATE permissions SET frontline = TRUE WHERE code IN ('pos.create', 'pos.sell', 'checkin.perform', 'attendance.self');
+UPDATE permissions SET requires_shift = TRUE WHERE code IN ('pos.create', 'pos.sell', 'checkin.perform');
+INSERT INTO permissions (code, module, description, admin_only, sort_order) VALUES
+('audit.view', 'Quản trị', 'Xem nhật ký hoạt động và cảnh báo bất thường của nhân sự', 1, 45);
+INSERT INTO role_permissions (role_id, permission_code) VALUES (1, 'audit.view');
+INSERT INTO system_configs (config_key, config_value, description) VALUES
+('CLOCK_IN_EARLY_MINUTES', '15', 'Được vào ca sớm tối đa bao nhiêu phút trước giờ bắt đầu ca'),
+('LATE_GRACE_MINUTES', '5', 'Vào ca trễ quá số phút này thì ghi nhận đi trễ');

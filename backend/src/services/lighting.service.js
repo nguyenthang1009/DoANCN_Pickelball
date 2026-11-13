@@ -46,7 +46,7 @@ function toView(c, result, bookingInfo, sensorFresh) {
     courtId: c.id, courtName: c.name, courtType: c.court_type, courtStatus: c.status,
     state: result.state, booking: bookingInfo,
     inputs: { lux: result.lux, activity: result.activity, luxSource: c.lux === null ? 'DEFAULT' : c.sensor_source, activitySource: c.activity === null ? 'CHECKIN' : c.sensor_source, sensorAt: c.sensor_at, sensorFresh },
-    mode: c.mode, manualLevel: c.manual_level, level: result.finalLevel, fuzzyLevel: result.level, centroid: result.centroid, warning: result.warning,
+    mode: c.mode, manualLevel: c.manual_level, manualLimited: Boolean(result.manualLimited), level: result.finalLevel, fuzzyLevel: result.level, centroid: result.centroid, warning: result.warning,
     memberships: result.memberships, fired: result.fired, curve: result.curve.filter((_, i) => i % 4 === 0),
     bulb: c.bulb_ip ? { ip: c.bulb_ip, ...yeelight.status(c.bulb_ip) } : null,
   };
@@ -83,7 +83,10 @@ async function evaluateNow(venueId, { at, notify = false } = {}) {
     const result = state === 'MAINTENANCE'
       ? { state, lux, activity, memberships: null, fired: [], centroid: 0, level: 0, warning: false, curve: [] }
       : fuzzy.infer(state, lux, activity);
-    result.finalLevel = state !== 'MAINTENANCE' && c.mode === 'MANUAL' ? c.manual_level : result.level;
+    // Đang có khách chơi: chỉnh tay chỉ được sáng hơn, không tắt hay giảm dưới mức Fuzzy tính
+    const manual = state !== 'MAINTENANCE' && c.mode === 'MANUAL';
+    result.manualLimited = manual && state === 'ACTIVE' && c.manual_level < result.level;
+    result.finalLevel = manual ? (result.manualLimited ? result.level : c.manual_level) : result.level;
     const bookingInfo = booking ? { code: booking.booking_code, customer: booking.customer, start: booking.start_time.slice(0, 5), end: booking.end_time.slice(0, 5), checkedIn: booking.checkin_status === 'CHECKED_IN' } : null;
     const view = toView(c, result, bookingInfo, sensorFresh);
 
@@ -169,10 +172,31 @@ async function setBulb(courtId, { ip }, user) {
   const court = await courtForUser(courtId, user);
   if (ip !== null && !(typeof ip === 'string' && yeelight.isLanAddress(ip.trim()))) throw new HttpError(400, 'VALIDATION_ERROR', 'Địa chỉ đèn phải là IPv4 trong mạng nội bộ, VD 192.168.1.50');
   const [[old]] = await pool.query('SELECT bulb_ip FROM court_lighting WHERE court_id = ?', [court.id]);
+  // Một bóng chỉ điều khiển một sân: hai sân cùng gửi lệnh khác nhau làm đèn tắt bật liên tục và bị khóa lệnh
+  if (ip !== null) {
+    const [taken] = await pool.query('SELECT c.name FROM court_lighting l JOIN courts c ON c.id = l.court_id WHERE l.bulb_ip = ? AND l.court_id <> ?', [ip.trim(), court.id]);
+    if (taken[0]) throw new HttpError(409, 'BULB_IN_USE', `Đèn ${ip.trim()} đang gán cho ${taken[0].name}. Gỡ đèn ở sân đó trước.`);
+  }
   if (old.bulb_ip) yeelight.forget(old.bulb_ip);
-  await pool.query('UPDATE court_lighting SET bulb_ip = ? WHERE court_id = ?', [ip === null ? null : ip.trim(), court.id]);
+  try {
+    await pool.query('UPDATE court_lighting SET bulb_ip = ? WHERE court_id = ?', [ip === null ? null : ip.trim(), court.id]);
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') throw new HttpError(409, 'BULB_IN_USE', `Đèn ${ip.trim()} vừa được gán cho sân khác`);
+    throw err;
+  }
   await audit.log(pool, { actorId: user.id, venueId: court.venue_id, actionType: 'LIGHTING_BULB', entityType: 'COURT', entityId: court.id, oldValues: { ip: old.bulb_ip }, newValues: { ip } });
   return evaluateVenue(court.venue_id, { notify: true });
+}
+
+// Tìm đèn Yeelight trong mạng nội bộ (đèn phải bật LAN Control), kèm sân đang gán từng đèn
+async function discoverBulbs(user, venueId) {
+  const venue = scopeVenue(user, venueId);
+  const found = (await yeelight.discover()).filter((b) => yeelight.isLanAddress(b.ip));
+  const [assigned] = await pool.query('SELECT l.bulb_ip, c.name, c.venue_id FROM court_lighting l JOIN courts c ON c.id = l.court_id WHERE l.bulb_ip IS NOT NULL');
+  return found.map((b) => {
+    const court = assigned.find((a) => a.bulb_ip === b.ip);
+    return { ...b, assignedTo: court ? (court.venue_id === venue ? court.name : 'cơ sở khác') : null };
+  });
 }
 
 // Điện năng: cộng dồn độ sáng theo thời gian từ nhật ký thay đổi, so với cách cũ là bật 100% suốt giờ có khách
@@ -219,4 +243,4 @@ async function list(user, venueId) {
   return evaluateVenue(scopeVenue(user, venueId));
 }
 
-module.exports = { resolveState, evaluateVenue, tick, list, simulate, deviceReading, setMode, setBulb, energy, model };
+module.exports = { resolveState, evaluateVenue, tick, list, simulate, deviceReading, setMode, setBulb, energy, model, discoverBulbs };

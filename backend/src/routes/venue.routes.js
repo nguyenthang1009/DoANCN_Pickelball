@@ -6,6 +6,7 @@ const users = require('../controllers/user.controller');
 const bookings = require('../controllers/booking.controller');
 const reports = require('../controllers/report.controller');
 const { verifyToken, can, authorizeVenue } = require('../middlewares/auth.middleware');
+const { onDuty } = require('../middlewares/duty.middleware');
 const { loadVenue } = require('../middlewares/load.middleware');
 
 const router = Router();
@@ -29,6 +30,6 @@ router.get('/:venueId/services', ...inVenue('service.view'), items.list);
 router.post('/:venueId/services', ...inVenue('service.manage'), items.create);
 router.get('/:venueId/staff', ...inVenue('staff.view'), users.listVenueStaff);
 router.get('/:venueId/bookings', ...inVenue('booking.view_venue'), bookings.listByVenue);
-router.post('/:venueId/service-orders', ...inVenue('pos.sell'), reports.sellServices);
+router.post('/:venueId/service-orders', ...inVenue('pos.sell'), onDuty, reports.sellServices);
 
 module.exports = router;

@@ -220,6 +220,7 @@ CREATE TABLE services (
     category ENUM('DRINK', 'EQUIPMENT', 'OTHER') NOT NULL DEFAULT 'DRINK',
     unit VARCHAR(30) NOT NULL DEFAULT 'Chai',     -- Chai, Lon, Lượt, Quả
     unit_price INT UNSIGNED NOT NULL,             -- BR18: Giá bán VND số nguyên
+    image_url VARCHAR(255) NULL,                  -- Ảnh món (chai nước, cây vợt) hiện ở màn bán hàng
     is_active BOOLEAN NOT NULL DEFAULT TRUE,      -- BR16: Món đã bán không xóa, chỉ ngừng bán
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -320,6 +321,8 @@ CREATE TABLE permissions (
     module VARCHAR(50) NOT NULL,                  -- Nhóm hiển thị trên ma trận quyền
     description VARCHAR(255) NOT NULL,
     admin_only BOOLEAN NOT NULL DEFAULT FALSE,    -- Quyền quản trị, không gán cho vai trò khác ngoài Admin
+    frontline BOOLEAN NOT NULL DEFAULT FALSE,     -- Thao tác tại quầy: chỉ nhân sự cơ sở dùng, Admin không dùng nhưng được cấp cho vai trò khác
+    requires_shift BOOLEAN NOT NULL DEFAULT FALSE, -- Chỉ dùng được khi đang trong ca trực đã được phân công
     sort_order INT UNSIGNED NOT NULL DEFAULT 0
 ) ENGINE=InnoDB;
 
@@ -486,6 +489,9 @@ CREATE TRIGGER trg_gl_entries_no_update BEFORE UPDATE ON gl_entries FOR EACH ROW
 CREATE TRIGGER trg_gl_entries_no_delete BEFORE DELETE ON gl_entries FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'So cai khong duoc xoa';
 CREATE TRIGGER trg_gl_lines_no_update BEFORE UPDATE ON gl_lines FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'So cai khong duoc sua';
 CREATE TRIGGER trg_gl_lines_no_delete BEFORE DELETE ON gl_lines FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'So cai khong duoc xoa';
+-- Nhật ký hoạt động là bằng chứng để Admin kiểm soát nhân sự: chỉ được ghi thêm
+CREATE TRIGGER trg_audit_no_update BEFORE UPDATE ON audit_logs FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Nhat ky hoat dong khong duoc sua';
+CREATE TRIGGER trg_audit_no_delete BEFORE DELETE ON audit_logs FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Nhat ky hoat dong khong duoc xoa';
 
 -- ----------------------------------------------------------------------------
 -- 18. TIỀN LƯƠNG - Hợp đồng theo ngày hiệu lực, kỳ lương theo cơ sở, phiếu lương chốt số liệu
@@ -612,6 +618,7 @@ CREATE TABLE court_lighting (
     level TINYINT UNSIGNED NOT NULL DEFAULT 0,    -- Độ sáng đang áp dụng (%)
     warning BOOLEAN NOT NULL DEFAULT FALSE,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT uq_lighting_bulb UNIQUE (bulb_ip),   -- Một bóng chỉ gán cho một sân
     CONSTRAINT chk_lighting_level CHECK (level <= 100 AND (manual_level IS NULL OR manual_level <= 100)),
     CONSTRAINT fk_lighting_court FOREIGN KEY (court_id) REFERENCES courts(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
@@ -684,6 +691,7 @@ CREATE TABLE attendance_records (
     clock_in DATETIME NOT NULL,
     clock_out DATETIME NULL,                      -- NULL: đang trong ca
     source ENUM('SELF', 'MANAGER') NOT NULL DEFAULT 'SELF',
+    auto_closed BOOLEAN NOT NULL DEFAULT FALSE,   -- Hết giờ ca mà chưa ra ca: hệ thống tự kết thúc tại giờ hết ca
     note VARCHAR(255) NULL,
     updated_by INT UNSIGNED NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -4,7 +4,7 @@ const pool = require('../config/db');
 const { jwt: jwtConfig, session, bcryptRounds } = require('../config/env');
 const HttpError = require('../utils/httpError');
 const { isEmail, isPhone, assertPassword, assertRequired } = require('../utils/validators');
-const { findById, rethrowDuplicate } = require('./user.service');
+const { findById, rethrowDuplicate, logAudit, INTERNAL_ROLES } = require('./user.service');
 const sessionService = require('./session.service');
 
 function signToken(user) {
@@ -36,7 +36,7 @@ async function register({ fullName, email, phone, password }) {
 }
 
 // Đăng nhập bằng email hoặc số điện thoại
-async function login({ identifier, password }) {
+async function login({ identifier, password, ip }) {
   assertRequired({ identifier, password }, ['identifier', 'password']);
   const key = String(identifier).trim().toLowerCase();
   const [rows] = await pool.query(
@@ -46,12 +46,15 @@ async function login({ identifier, password }) {
   const row = rows[0];
   // Cùng một thông báo cho sai tài khoản và sai mật khẩu để không lộ tài khoản nào tồn tại
   if (!row || !(await bcrypt.compare(String(password), row.password_hash))) {
+    // Tài khoản nội bộ bị nhập sai: ghi lại để Admin thấy dấu hiệu dò mật khẩu
+    if (row && INTERNAL_ROLES.includes(row.role)) await logAudit(pool, { actorId: null, venueId: row.venue_id, actionType: 'LOGIN_FAILED', entityType: 'USER', entityId: row.id, newValues: { ip: ip ?? null } });
     throw new HttpError(401, 'INVALID_CREDENTIALS', 'Sai tài khoản hoặc mật khẩu');
   }
   // G7, US-A03: tài khoản bị khóa không được đăng nhập
   if (!row.is_active) throw new HttpError(403, 'ACCOUNT_LOCKED', 'Tài khoản đã bị khóa');
 
   const user = await findById(row.id);
+  if (INTERNAL_ROLES.includes(row.role)) await logAudit(pool, { actorId: row.id, venueId: row.venue_id, actionType: 'LOGIN', entityType: 'USER', entityId: row.id, newValues: { ip: ip ?? null } });
   return { token: signToken(user), user };
 }
 

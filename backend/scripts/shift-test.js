@@ -126,6 +126,8 @@ async function testApi() {
   const inRes = await call('/shifts/me/clock-in', { method: 'POST', token: staff });
   check('Lễ tân vào ca, tự gắn với ca trong lịch', inRes.status === 200 && inRes.data.open?.shiftName === 'Ca thử', JSON.stringify(inRes.data));
   expectError('Vào ca hai lần bị chặn', await call('/shifts/me/clock-in', { method: 'POST', token: staff }), 409, 'ALREADY_CLOCKED_IN');
+  expectError('Quản lý chưa được xếp ca thì không vào ca được', await call('/shifts/me/clock-in', { method: 'POST', token: manager }), 409, 'NO_ASSIGNED_SHIFT');
+  check('Admin xếp ca cho quản lý', (await assign({ userId: 2, workDate: today, templateId: liveId }, admin)).status === 200);
   const race = await Promise.all(Array.from({ length: 10 }, () => call('/shifts/me/clock-in', { method: 'POST', token: manager })));
   same('10 lần bấm vào ca cùng lúc chỉ ghi 1 lượt', race.filter((r) => r.status === 200).length, 1);
   const duty = (await call('/shifts/on-duty', { token: manager })).data.onDuty;

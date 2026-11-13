@@ -5,6 +5,7 @@
 require('dotenv').config({ quiet: true });
 const net = require('net');
 const mysql = require('mysql2/promise');
+const { putOnDuty } = require('./lib/duty');
 const { infer, RULES } = require('../src/utils/fuzzy');
 const lighting = require('../src/services/lighting.service');
 
@@ -92,6 +93,10 @@ async function testApi(tokens) {
   expectError('Quản lý không chỉnh được sân cơ sở khác', await call('/lighting/courts/5/sensor', { method: 'PUT', token: manager, body: { lux: 10 } }), 403, 'FORBIDDEN');
   expectError('Mức hoạt động ngoài 0-10 bị từ chối', await call('/lighting/courts/2/sensor', { method: 'PUT', token: manager, body: { activity: 11 } }), 400, 'VALIDATION_ERROR');
   expectError('Địa chỉ đèn ngoài mạng nội bộ bị từ chối', await call('/lighting/courts/2/bulb', { method: 'PUT', token: manager, body: { ip: '8.8.8.8' } }), 400, 'VALIDATION_ERROR');
+  // Một bóng gán cho hai sân thì hai sân gửi lệnh ngược nhau, đèn tắt bật liên tục
+  await call('/lighting/courts/2/bulb', { method: 'PUT', token: manager, body: { ip: '192.168.77.77' } });
+  expectError('Một đèn không gán được cho hai sân', await call('/lighting/courts/3/bulb', { method: 'PUT', token: manager, body: { ip: '192.168.77.77' } }), 409, 'BULB_IN_USE');
+  await call('/lighting/courts/2/bulb', { method: 'PUT', token: manager, body: { ip: null } });
 
   const sim = await call('/lighting/courts/2/sensor', { method: 'PUT', token: manager, body: { lux: 250, activity: 8 } });
   const court2 = sim.data.courts.find((c) => c.courtId === 2);
@@ -222,6 +227,7 @@ async function testEnergy(db, tokens) {
     customer: await login('customer1@gmail.com'), staff: await login('staff.q7@pickleball.vn'),
     manager: await login('manager.q7@pickleball.vn'), admin: await login('admin@pickleball.vn'),
   };
+  await putOnDuty(BASE, { assignerToken: tokens.manager, userId: 3, userToken: tokens.staff });
   await testStates(db, tokens);
   await testApi(tokens);
   await testRealtimeLoop(tokens);

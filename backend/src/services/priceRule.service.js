@@ -1,7 +1,7 @@
 const pool = require('../config/db');
 const HttpError = require('../utils/httpError');
 const withTransaction = require('../utils/transaction');
-const { toMinutes, toTime, hhmm, assertHalfHour, assertDate, isWeekend } = require('../utils/time');
+const { toMinutes, toTime, hhmm, assertHalfHour, assertDate, isWeekend, nowInVietnam } = require('../utils/time');
 const { assertRequired } = require('../utils/validators');
 const configService = require('./config.service');
 const audit = require('./audit.service');
@@ -81,11 +81,17 @@ async function replaceForCourt(court, venue, input, actor) {
       [rules.map((r) => [court.id, r.dayType, toTime(r.start), toTime(r.end), r.pricePerHour, actor.id])],
     );
     const newRules = await listByCourt(court.id, conn);
+    const now = nowInVietnam();
+    const [[{ kept }]] = await conn.query(
+      `SELECT COUNT(*) AS kept FROM booking_slots WHERE court_id = ? AND slot_status IN ('HELD', 'CONFIRMED')
+          AND (booking_date > ? OR (booking_date = ? AND end_time > ?))`,
+      [court.id, now.date, now.date, `${now.time}:00`],
+    );
     await audit.log(conn, {
       actorId: actor.id, venueId: court.venueId, actionType: 'UPDATE_PRICE', entityType: 'COURT', entityId: court.id,
       oldValues: oldRules.map(({ id, ...r }) => r), newValues: newRules.map(({ id, ...r }) => r),
     });
-    return newRules;
+    return { rules: newRules, keptSlots: Number(kept) };
   });
 }
 

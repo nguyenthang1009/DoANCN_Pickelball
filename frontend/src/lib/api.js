@@ -64,6 +64,8 @@ export async function api(path, options = {}) {
     }
   }
   if (!res.ok) {
+    // Ca vừa hết giờ trong lúc đang thao tác: báo khung trang cập nhật trạng thái ca để khóa giao diện
+    if (data?.error?.code === 'NOT_ON_DUTY') window.dispatchEvent(new Event('pkb:duty-refresh'));
     throw new ApiError(res.status, data?.error?.code || 'HTTP_ERROR', data?.error?.message || `Lỗi máy chủ (${res.status})`);
   }
   return data;

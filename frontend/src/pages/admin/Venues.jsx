@@ -48,7 +48,7 @@ export default function Venues() {
   }
 
   async function toggleVenue(v) {
-    if (v.isActive && !(await confirm({ title: `Tạm ngừng ${v.name}?`, message: 'Khách sẽ không thấy và không đặt được cơ sở này.', tone: 'danger', confirmText: 'Tạm ngừng', cancelText: 'Giữ lại' }))) return;
+    if (v.isActive && !(await confirm({ title: `Tạm ngừng ${v.name}?`, message: 'Khách sẽ không thấy và không đặt được cơ sở này. Cơ sở còn đơn sắp tới thì hệ thống không cho tạm ngừng, cần xử lý các đơn đó trước.', tone: 'danger', confirmText: 'Tạm ngừng', cancelText: 'Giữ lại' }))) return;
     run(() => api(`/venues/${v.id}`, { method: 'PATCH', body: { isActive: !v.isActive } }), `${v.isActive ? 'Đã tạm ngừng' : 'Đã mở lại'} ${v.name}`);
   }
 

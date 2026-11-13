@@ -114,10 +114,11 @@ Mật khẩu chung: `12345678`.
 
 1. **Khách đặt sân:** đăng nhập `customer1@gmail.com`, vào **Đặt sân**, chọn ngày và các ô giờ trống, bấm đặt.
 2. **Thanh toán:** chưa có khóa PayOS thì trang thanh toán chạy chế độ giả lập. Bấm **Giả lập chuyển khoản thành công**, đơn chuyển sang đã thanh toán và hiện vé có mã QR.
-3. **Lễ tân check-in:** đăng xuất, đăng nhập `staff.q7@pickleball.vn`, vào **Check-in QR**, nhập mã đơn, bấm **Xác nhận nhận sân**.
-4. **Chấm công:** vẫn tài khoản lễ tân, vào **Chấm công**, bấm **Vào ca**.
-5. **Quản lý:** đăng nhập `manager.q7@pickleball.vn`, xem **Ca làm & chấm công** (thấy lễ tân đang trong ca), **Chiếu sáng thông minh** (kéo thanh trượt ánh sáng và mức hoạt động để xem đèn tự chỉnh).
-6. **Admin:** đăng nhập `admin@pickleball.vn`, vào **Dự báo doanh thu**, chọn nguồn **Mô phỏng để trình diễn** để xem biểu đồ dự báo (máy mới chưa có đủ lịch sử doanh thu thật).
+3. **Quản lý xếp ca:** đăng xuất, đăng nhập `manager.q7@pickleball.vn`, vào **Ca làm & chấm công**, xếp cho lễ tân một ca hôm nay đang diễn ra (chưa có mẫu ca hợp giờ thì tạo mẫu ca mới).
+4. **Lễ tân vào ca:** đăng nhập `staff.q7@pickleball.vn`, vào **Chấm công**, bấm **Vào ca**. Chưa vào ca thì POS, check-in, bán dịch vụ đều bị khóa.
+5. **Lễ tân check-in:** vào **Check-in QR**, nhập mã đơn, bấm **Xác nhận nhận sân**.
+6. **Quản lý:** xem **Chiếu sáng thông minh** (kéo thanh trượt ánh sáng và mức hoạt động để xem đèn tự chỉnh).
+7. **Admin:** đăng nhập `admin@pickleball.vn`, vào **Nhật ký hoạt động** xem lại các thao tác vừa rồi, vào **Dự báo doanh thu**, chọn nguồn **Mô phỏng để trình diễn** để xem biểu đồ dự báo (máy mới chưa có đủ lịch sử doanh thu thật). Admin chỉ giám sát nên không đặt sân, bán hàng hay check-in.
 
 ## 8. Phần tùy chọn
 

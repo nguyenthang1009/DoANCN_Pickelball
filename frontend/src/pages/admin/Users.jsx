@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useFeedback } from '../../lib/feedback';
@@ -19,6 +20,7 @@ export default function Users() {
   const [form, setForm] = useState({ fullName: '', email: '', phone: '', role: 'STAFF', venueId: '' });
   const [error, setError] = useState('');
   const [created, setCreated] = useState(null);
+  const [editing, setEditing] = useState(null);
   const load = useCallback(() => { api(`/admin/users${filter ? `?role=${filter}` : ''}`).then((d) => setUsers(d.users)).catch((e) => setError(e.message)); }, [filter]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { api('/admin/venues').then((d) => setVenues(d.venues)).catch(() => {}); }, []);
@@ -53,6 +55,40 @@ export default function Users() {
     } catch (e) { notify.error(e.message); }
   }
 
+  // Sửa họ tên, số điện thoại, cơ sở làm việc; email là tên đăng nhập nên giữ nguyên
+  async function saveProfile() {
+    const target = editing;
+    const ok = await confirm({
+      title: `Lưu thông tin ${target.user.fullName}?`,
+      details: [['Họ tên', target.fullName], ['Điện thoại', target.phone], ...(target.user.role !== 'ADMIN' ? [['Cơ sở', venueName(Number(target.venueId))]] : [])],
+      confirmText: 'Lưu thay đổi',
+    });
+    if (!ok) return;
+    try {
+      await api(`/admin/users/${target.user.id}/profile`, { method: 'PATCH', body: { fullName: target.fullName, phone: target.phone, ...(target.user.role !== 'ADMIN' ? { venueId: Number(target.venueId) } : {}) } });
+      notify.success(`Đã cập nhật ${target.fullName}`);
+      setEditing(null);
+      load();
+    } catch (e) { notify.error(e.message); }
+  }
+
+  // Nhân viên quên mật khẩu: cấp mật khẩu tạm, đăng xuất mọi thiết bị, lần đăng nhập tới phải đổi
+  async function resetPassword(u) {
+    const ok = await confirm({
+      title: `Đặt lại mật khẩu ${u.fullName}?`,
+      message: 'Mật khẩu cũ hết hiệu lực, tài khoản bị đăng xuất khỏi mọi thiết bị. Mật khẩu tạm chỉ hiện một lần để bạn giao trực tiếp cho nhân viên.',
+      tone: 'warning',
+      confirmText: 'Đặt lại mật khẩu',
+    });
+    if (!ok) return;
+    try {
+      const r = await api(`/admin/users/${u.id}/reset-password`, { method: 'POST', body: {} });
+      setCreated({ ...r, reset: true });
+      notify.success(`Đã đặt lại mật khẩu ${u.fullName}`);
+      load();
+    } catch (e) { notify.error(e.message); }
+  }
+
   const assignedRole = roles.find((r) => r.id === Number(assigning?.roleId));
 
   async function assign() {
@@ -82,7 +118,7 @@ export default function Users() {
         </Select>
       </PageHeader>
       <Alert>{error}</Alert>
-      {created && <Alert kind="success">Đã tạo {created.user.fullName}. Mật khẩu tạm: <b>{created.tempPassword}</b> (chỉ hiện một lần, nhân viên phải đổi ở lần đăng nhập đầu).</Alert>}
+      {created && <Alert kind="success">{created.reset ? 'Đã đặt lại mật khẩu' : 'Đã tạo'} {created.user.fullName}. Mật khẩu tạm: <b>{created.tempPassword}</b> (chỉ hiện một lần, nhân viên phải đổi ở lần đăng nhập đầu).</Alert>}
       <div className="mt-4 grid gap-6 xl:grid-cols-[1fr_360px]">
         <Card className="overflow-x-auto p-0">
           {!users ? <Spinner /> : (
@@ -98,6 +134,9 @@ export default function Users() {
                     <td className="px-4 py-3"><Badge tone={u.isActive ? 'green' : 'red'}>{u.isActive ? 'Hoạt động' : 'Đã khóa'}</Badge></td>
                     <td className="px-4 py-3 text-right">{u.id !== me.id && (
                       <div className="flex justify-end gap-2">
+                        {u.role !== 'CUSTOMER' && can('audit.view') && <Link to={`/quan-tri/nhat-ky?actor=${u.id}`} className="rounded-lg px-3 py-1 text-sm font-semibold text-teal-700 hover:bg-teal-50">Nhật ký</Link>}
+                        {u.role !== 'CUSTOMER' && can('user.manage') && <Button kind="ghost" className="px-3 py-1 text-sm" onClick={() => setEditing({ user: u, fullName: u.fullName, phone: u.phone, venueId: u.venueId ?? '' })}>Sửa</Button>}
+                        {u.role !== 'CUSTOMER' && can('user.manage') && <Button kind="ghost" className="px-3 py-1 text-sm" onClick={() => resetPassword(u)}>Đặt lại mật khẩu</Button>}
                         {u.role !== 'CUSTOMER' && roles.length > 0 && <Button kind="ghost" className="px-3 py-1 text-sm" onClick={() => setAssigning({ user: u, roleId: u.roleId, venueId: u.venueId ?? '' })}>Đổi vai trò</Button>}
                         <Button kind="secondary" className="px-3 py-1 text-sm" onClick={() => toggle(u)}>{u.isActive ? 'Khóa' : 'Mở khóa'}</Button>
                       </div>
@@ -127,6 +166,25 @@ export default function Users() {
           </form>
         </Card>
       </div>
+      {editing && (
+        <Modal
+          title={`Sửa thông tin: ${editing.user.fullName}`}
+          onClose={() => setEditing(null)}
+          footer={<><Button kind="ghost" onClick={() => setEditing(null)}>Đóng</Button><Button onClick={saveProfile} disabled={!editing.fullName.trim() || !editing.phone.trim()}>Lưu</Button></>}
+        >
+          <div className="flex flex-col gap-3">
+            <Input label="Email (tên đăng nhập, không đổi)" value={editing.user.email} disabled />
+            <Input label="Họ tên" value={editing.fullName} onChange={(e) => setEditing({ ...editing, fullName: e.target.value })} />
+            <Input label="Số điện thoại" value={editing.phone} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} />
+            {editing.user.role !== 'ADMIN' && (
+              <Select label="Cơ sở làm việc" value={editing.venueId} onChange={(e) => setEditing({ ...editing, venueId: e.target.value })}>
+                {venues.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </Select>
+            )}
+            <p className="text-xs text-slate-600">Mọi thay đổi được ghi vào nhật ký hoạt động. Nhân viên đang trong ca thì chưa chuyển cơ sở được.</p>
+          </div>
+        </Modal>
+      )}
       {assigning && (
         <Modal
           title={`Đổi vai trò: ${assigning.user.fullName}`}

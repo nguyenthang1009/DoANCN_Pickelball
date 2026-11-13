@@ -11,6 +11,7 @@ import MyInvoices from './pages/customer/MyInvoices';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import ChangePassword from './pages/auth/ChangePassword';
+import { DutyGate } from './lib/duty';
 
 // Trang nội bộ tải riêng (Chart.js, quét QR nặng) để trang đặt sân của khách nhẹ hơn
 const Pos = lazy(() => import('./pages/staff/Pos'));
@@ -35,6 +36,7 @@ const Payroll = lazy(() => import('./pages/finance/Payroll'));
 const Lighting = lazy(() => import('./pages/manager/Lighting'));
 const ShiftPlanner = lazy(() => import('./pages/manager/ShiftPlanner'));
 const Forecast = lazy(() => import('./pages/finance/Forecast'));
+const Activity = lazy(() => import('./pages/admin/Activity'));
 const MyAttendance = lazy(() => import('./pages/staff/MyAttendance'));
 
 // Phân quyền giao diện theo mã chức năng; backend vẫn kiểm tra lại mọi API
@@ -58,9 +60,9 @@ export default function App() {
         <Route path="/hoa-don" element={guard(['invoice.view_own'], <MyInvoices />)} />
       </Route>
       <Route element={<RequireAccess internal><StaffLayout /></RequireAccess>}>
-        <Route path="/pos" element={guard(['pos.create'], <Pos />)} />
-        <Route path="/check-in" element={guard(['checkin.perform'], <CheckIn />)} />
-        <Route path="/ban-dich-vu" element={guard(['pos.sell'], <SellServices />)} />
+        <Route path="/pos" element={guard(['pos.create'], <DutyGate><Pos /></DutyGate>)} />
+        <Route path="/check-in" element={guard(['checkin.perform'], <DutyGate><CheckIn /></DutyGate>)} />
+        <Route path="/ban-dich-vu" element={guard(['pos.sell'], <DutyGate><SellServices /></DutyGate>)} />
         <Route path="/don-hom-nay" element={guard(['booking.view_venue'], <DayBookings />)} />
         <Route path="/doanh-thu-ca" element={guard(['report.shift'], <Shift />)} />
         <Route path="/quan-ly/tong-quan" element={guard(['report.revenue'], <Dashboard />)} />
@@ -77,6 +79,7 @@ export default function App() {
         <Route path="/chieu-sang" element={guard(['lighting.view'], <Lighting />)} />
         <Route path="/ca-lam" element={guard(['shift.manage'], <ShiftPlanner />)} />
         <Route path="/du-bao" element={guard(['forecast.view'], <Forecast />)} />
+        <Route path="/quan-tri/nhat-ky" element={guard(['audit.view'], <Activity />)} />
         <Route path="/cham-cong" element={guard(['attendance.self'], <MyAttendance />)} />
         <Route path="/tien-luong" element={guard(['payroll.manage', 'payroll.approve'], <Payroll />)} />
         <Route path="/phieu-luong" element={guard(['payroll.view_own'], <MyPayslips />)} />

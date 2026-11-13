@@ -36,7 +36,7 @@ export default function SellServices() {
   }
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-4xl">
       <PageHeader title="Bán dịch vụ tại quầy" subtitle="Nước uống, thuê vợt, bóng cho khách không kèm đơn sân" scope={scope} />
       <Card className="flex flex-col gap-4">
         <Alert>{error}</Alert>

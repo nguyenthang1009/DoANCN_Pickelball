@@ -42,6 +42,8 @@ export default function DayBookings() {
   }
 
   const canCancel = can('booking.cancel');
+  // Đơn đã thanh toán mà đã tới giờ chơi thì không hủy: khách có thể đang ở trên sân
+  const started = (b) => Date.parse(`${date}T${b.startTime}:00+07:00`) <= Date.now();
   return (
     <div>
       <PageHeader title="Đơn trong ngày" subtitle={list ? `${list.length} đơn` : ''} scope={scope}>
@@ -65,7 +67,9 @@ export default function DayBookings() {
                   <td className="px-4 py-3">{b.paymentStatus === 'PAID' ? <CheckinBadge status={b.checkinStatus} /> : '—'}</td>
                   <td className="px-4 py-3 text-right">
                     {canCancel && (b.paymentStatus === 'PENDING_PAYMENT' || (b.paymentStatus === 'PAID' && b.checkinStatus === 'PENDING')) && (
-                      <Button kind="ghost" className="px-3 py-1 text-sm" onClick={() => cancel(b)}>Hủy</Button>
+                      b.paymentStatus === 'PAID' && started(b)
+                        ? <span className="text-xs text-slate-500" title="Đơn đã tới giờ chơi nên không hủy được">Đã tới giờ chơi</span>
+                        : <Button kind="ghost" className="px-3 py-1 text-sm" onClick={() => cancel(b)}>Hủy</Button>
                     )}
                   </td>
                 </tr>

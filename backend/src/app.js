@@ -16,6 +16,7 @@ app.use(cors({ origin: corsOrigins, credentials: true }));
 app.use(cookieParser());
 app.use(express.json({ limit: '100kb' }));
 app.use('/uploads/site', express.static(UPLOAD_DIR, { maxAge: '7d', index: false, setHeaders: (res) => res.set('Cross-Origin-Resource-Policy', 'cross-origin') }));
+app.use('/uploads/services', express.static(require('./services/serviceItem.service').IMAGE_DIR, { maxAge: '7d', index: false, setHeaders: (res) => res.set('Cross-Origin-Resource-Policy', 'cross-origin') }));
 app.use('/api', apiLimiter, verifyOrigin, routes);
 app.use(notFound);
 app.use(errorHandler);

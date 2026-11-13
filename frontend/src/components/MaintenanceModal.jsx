@@ -10,6 +10,7 @@ export default function MaintenanceModal({ court, onClose, onDone }) {
   const { can } = useAuth();
   const { notify, confirm: ask } = useFeedback();
   const [bookings, setBookings] = useState(null);
+  const [playing, setPlaying] = useState(null);
   const [picks, setPicks] = useState({});
   const [reason, setReason] = useState('');
   const [moved, setMoved] = useState([]);
@@ -17,7 +18,7 @@ export default function MaintenanceModal({ court, onClose, onDone }) {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
-    api(`/courts/${court.id}/impact`).then((d) => setBookings(d.bookings)).catch((e) => setError(e.message));
+    api(`/courts/${court.id}/impact`).then((d) => { setBookings(d.bookings); setPlaying(d.playing ?? null); }).catch((e) => setError(e.message));
   }, [court.id]);
   useEffect(() => { load(); }, [load]);
 
@@ -65,14 +66,19 @@ export default function MaintenanceModal({ court, onClose, onDone }) {
       footer={(
         <>
           <Button kind="ghost" onClick={onClose}>Đóng</Button>
-          <Button kind="danger" loading={busy} disabled={!reason.trim() || !bookings} onClick={confirm}>Xác nhận bảo trì</Button>
+          <Button kind="danger" loading={busy} disabled={!reason.trim() || !bookings || Boolean(playing)} onClick={confirm}>Xác nhận bảo trì</Button>
         </>
       )}
     >
       <div className="flex flex-col gap-4">
         <Alert>{error}</Alert>
+        {playing && (
+          <Alert kind="warning">
+            Sân đang có khách chơi tới <b>{playing.endTime}</b> (đơn {playing.bookingCode}{playing.checkedIn ? ', đã nhận sân' : ''}). Không khóa sân khi khách đang chơi; hãy đặt bảo trì sau {playing.endTime}.
+          </Alert>
+        )}
         {!bookings ? <Spinner /> : remaining === 0 ? (
-          <p className="text-slate-600">Sân không có đơn sắp tới, có thể khóa ngay.</p>
+          <p className="text-slate-600">{playing ? 'Ngoài đơn đang chơi, sân không có đơn sắp tới.' : 'Sân không có đơn sắp tới, có thể khóa ngay.'}</p>
         ) : (
           <>
             <Alert kind="warning">{remaining} đơn sắp tới bị ảnh hưởng. Đơn chưa đổi sân sẽ bị hủy, đơn đã thanh toán chuyển sang chờ hoàn tiền.</Alert>

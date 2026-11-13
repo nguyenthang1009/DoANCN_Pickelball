@@ -11,7 +11,8 @@ router.use(verifyToken);
 // Nhân viên tự vào ca, ra ca, xem lịch của mình
 router.get('/me', can('attendance.self'), send((req) => shifts.myStatus(req.user)));
 router.post('/me/clock-in', can('attendance.self'), send((req) => shifts.clockIn(req.user)));
-router.post('/me/clock-out', can('attendance.self'), send((req) => shifts.clockOut(req.user)));
+// Ra ca luôn được phép khi đang có lượt mở, kể cả khi vai trò vừa bị gỡ quyền chấm công, để không kẹt ca tính công sai
+router.post('/me/clock-out', can(), send((req) => shifts.clockOut(req.user)));
 
 // Quản lý xếp ca, xem ai đang trong ca, sửa chấm công
 router.get('/templates', can('shift.manage'), send(async (req) => ({ templates: await shifts.listTemplates(req.user, req.query.venueId) })));

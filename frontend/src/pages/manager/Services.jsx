@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../../lib/api';
+import { api, uploadImage } from '../../lib/api';
+import { ServiceThumb } from '../../components/ServiceCart';
 import { useFeedback } from '../../lib/feedback';
 import { vnd } from '../../lib/format';
 import { useVenueScope } from '../../lib/useVenueScope';
@@ -33,6 +34,20 @@ export default function Services() {
     }).then((v) => { if (v) run(() => api(`/services/${s.id}`, { method: 'PATCH', body: { unitPrice: Number(v) } }), `Đã đổi giá ${s.name}`); });
   }
 
+  // Ảnh món giúp lễ tân nhận đúng loại nước, loại vợt khi bán
+  function pickImage(s, e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 6 * 1024 * 1024) { notify.error('Ảnh tối đa 6 MB'); return; }
+    run(() => uploadImage(`/services/${s.id}/image`, file), `Đã đổi ảnh ${s.name}`);
+  }
+  async function removeImage(s) {
+    if (await confirm({ title: `Gỡ ảnh ${s.name}?`, message: 'Màn bán hàng sẽ hiện biểu tượng theo nhóm thay cho ảnh.', tone: 'warning', confirmText: 'Gỡ ảnh' })) {
+      run(() => api(`/services/${s.id}/image`, { method: 'DELETE' }), `Đã gỡ ảnh ${s.name}`);
+    }
+  }
+
   async function toggle(s) {
     if (s.isActive && !(await confirm({ title: `Ngừng bán ${s.name}?`, message: 'Món sẽ biến mất khỏi màn hình bán tại quầy. Lịch sử bán hàng vẫn được giữ.', tone: 'warning', confirmText: 'Ngừng bán' }))) return;
     run(() => api(`/services/${s.id}`, { method: 'PATCH', body: { isActive: !s.isActive } }), `${s.isActive ? 'Đã ngừng bán' : 'Đã mở bán lại'} ${s.name}`);
@@ -45,10 +60,22 @@ export default function Services() {
       <Card className="mt-4 overflow-x-auto p-0">
         {!items ? <Spinner /> : (
           <table className="w-full text-left text-sm">
-            <thead className="text-xs text-slate-600"><tr>{['Tên', 'Nhóm', 'Đơn vị', 'Đơn giá', 'Trạng thái', ''].map((h) => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}</tr></thead>
+            <thead className="text-xs text-slate-600"><tr>{['Ảnh', 'Tên', 'Nhóm', 'Đơn vị', 'Đơn giá', 'Trạng thái', ''].map((h) => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}</tr></thead>
             <tbody>
               {items.map((s) => (
                 <tr key={s.id} className={`border-t border-slate-200 ${s.isActive ? '' : 'text-slate-600'}`}>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <ServiceThumb item={s} className="h-14 w-14" />
+                      <div className="flex flex-col items-start gap-0.5 text-xs">
+                        <label className="cursor-pointer font-semibold text-teal-700 hover:underline">
+                          {s.imageUrl ? 'Đổi ảnh' : 'Thêm ảnh'}
+                          <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => pickImage(s, e)} />
+                        </label>
+                        {s.imageUrl && <button type="button" className="text-slate-600 hover:text-red-700" onClick={() => removeImage(s)}>Gỡ ảnh</button>}
+                      </div>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 font-medium">{s.name}</td>
                   <td className="px-4 py-3">{GROUP[s.category]}</td>
                   <td className="px-4 py-3">{s.unit}</td>

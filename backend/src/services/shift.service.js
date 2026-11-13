@@ -3,10 +3,14 @@ const HttpError = require('../utils/httpError');
 const withTransaction = require('../utils/transaction');
 const { assertDate, toMinutes, hhmm } = require('../utils/time');
 const audit = require('./audit.service');
+const configService = require('./config.service');
 
 const DT = (col) => `DATE_FORMAT(${col}, '%Y-%m-%d %H:%i:%s')`;
 const DATETIME_RE = /^\d{4}-\d{2}-\d{2} ([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
-const EARLY_CLOCK_IN_MINUTES = 30; // Được vào ca sớm tối đa 30 phút trước giờ bắt đầu
+// Được vào ca sớm tối đa bao nhiêu phút trước giờ bắt đầu, và trễ quá bao nhiêu phút thì ghi đi trễ (đọc từ system_configs)
+const earlyMinutes = () => configService.getNumber('CLOCK_IN_EARLY_MINUTES', 15);
+const lateGraceMinutes = () => configService.getNumber('LATE_GRACE_MINUTES', 5);
+const EARLY_CLOCK_IN_MINUTES = 15; // chỉ dùng để tìm ca khi quản lý ghi bù
 
 // Giờ Việt Nam hiện tại dạng 'YYYY-MM-DD HH:MM:SS', không phụ thuộc múi giờ máy chủ
 const nowVN = () => new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 19).replace('T', ' ');
@@ -135,12 +139,19 @@ async function unassign(user, id) {
 }
 
 // ---------- Vào ca, ra ca ----------
+// Giờ được tính công: tự chấm theo ca thì tính từ giờ bắt đầu ca (vào sớm không tính) tới lúc ra ca (không quá giờ hết ca).
+// Quản lý ghi bù hoặc sửa thì tính đúng giờ đã ghi, vì đó là phần làm thêm đã được duyệt kèm lý do.
+const countedStart = (r) => (r.source === 'SELF' && r.starts_at && r.clock_in < r.starts_at ? r.starts_at : r.clock_in);
 const toRecord = (r) => ({
   id: r.id, userId: r.user_id, fullName: r.full_name, assignmentId: r.assignment_id, shiftName: r.shift_name ?? null,
-  clockIn: r.clock_in, clockOut: r.clock_out, minutes: r.clock_out ? minutesBetween(r.clock_in, r.clock_out) : null, source: r.source, note: r.note,
+  shiftStart: r.starts_at ?? null, shiftEnd: r.ends_at ?? null,
+  clockIn: r.clock_in, clockOut: r.clock_out, minutes: r.clock_out ? Math.max(0, minutesBetween(countedStart(r), r.clock_out)) : null,
+  lateMinutes: r.source === 'SELF' && r.starts_at ? Math.max(0, minutesBetween(r.starts_at, r.clock_in)) : 0,
+  autoClosed: Boolean(r.auto_closed), source: r.source, note: r.note,
 });
 const RECORD_SELECT = `
-  SELECT r.id, r.user_id, u.full_name, r.assignment_id, t.name AS shift_name, ${DT('r.clock_in')} AS clock_in, ${DT('r.clock_out')} AS clock_out, r.source, r.note
+  SELECT r.id, r.user_id, u.full_name, r.assignment_id, t.name AS shift_name, ${DT('r.clock_in')} AS clock_in, ${DT('r.clock_out')} AS clock_out,
+         ${DT('a.starts_at')} AS starts_at, ${DT('a.ends_at')} AS ends_at, r.source, r.auto_closed, r.note
     FROM attendance_records r JOIN users u ON u.id = r.user_id
     LEFT JOIN shift_assignments a ON a.id = r.assignment_id LEFT JOIN shift_templates t ON t.id = a.template_id`;
 
@@ -149,20 +160,64 @@ async function openRecord(userId, db = pool) {
   return rows[0] ? toRecord(rows[0]) : null;
 }
 
+// Đang trong ca hợp lệ: có lượt chưa ra ca, gắn với ca được phân công tại đúng cơ sở, và ca chưa hết giờ.
+// Kiểm tra cả giờ hết ca, không chờ tác vụ nền tự kết thúc ca.
+async function activeDuty(user, db = pool) {
+  const [rows] = await db.query(
+    `SELECT r.id, ${DT('a.ends_at')} AS ends_at, t.name AS shift_name FROM attendance_records r
+       JOIN shift_assignments a ON a.id = r.assignment_id JOIN shift_templates t ON t.id = a.template_id
+      WHERE r.user_id = ? AND r.venue_id = ? AND r.clock_out IS NULL AND a.ends_at > ?`,
+    [user.id, user.venueId ?? 0, nowVN()],
+  );
+  return rows[0] ?? null;
+}
+
+async function assertOnDuty(user) {
+  if (user.role === 'ADMIN') throw new HttpError(403, 'ADMIN_NO_FRONTLINE', 'Tài khoản quản trị không đặt sân, bán hàng hay check-in. Việc này do nhân sự cơ sở làm trong ca trực.');
+  if (!(await activeDuty(user))) {
+    throw new HttpError(403, 'NOT_ON_DUTY', 'Bạn chưa vào ca trực nên chưa thao tác được. Vào trang Chấm công để vào ca theo lịch đã được phân công.');
+  }
+}
+
+// Ca sắp tới gần nhất chưa chấm công, để báo cho nhân viên khi chưa vào ca được
+async function nextShift(userId, now, db = pool) {
+  const [rows] = await db.query(
+    `SELECT t.name, ${DT('a.starts_at')} AS starts_at, ${DT('a.ends_at')} AS ends_at FROM shift_assignments a
+       JOIN shift_templates t ON t.id = a.template_id LEFT JOIN attendance_records r ON r.assignment_id = a.id
+      WHERE a.user_id = ? AND a.ends_at > ? AND r.id IS NULL ORDER BY a.starts_at LIMIT 1`,
+    [userId, now],
+  );
+  return rows[0] ?? null;
+}
+
 async function clockIn(user) {
   if (!user.venueId) throw new HttpError(409, 'NO_VENUE', 'Tài khoản chưa được gán cơ sở');
   const now = nowVN();
+  const early = await earlyMinutes();
   try {
     await withTransaction(async (conn) => {
       await conn.query('SELECT id FROM users WHERE id = ? FOR UPDATE', [user.id]);
       if (await openRecord(user.id, conn)) throw new HttpError(409, 'ALREADY_CLOCKED_IN', 'Bạn đang trong ca, cần ra ca trước');
-      // Gắn với ca trong lịch nếu đang trong khung giờ ca (cho phép vào sớm 30 phút)
+      // Chỉ vào ca theo lịch được phân công tại đúng cơ sở của mình, trong khung giờ ca (cho phép sớm vài phút).
+      // Không có ca thì không vào được: tránh làm thay người khác hay tự ý vào ca để tính lương.
       const [shifts] = await conn.query(
-        `SELECT a.id FROM shift_assignments a LEFT JOIN attendance_records r ON r.assignment_id = a.id
-          WHERE a.user_id = ? AND a.starts_at <= ? AND a.ends_at > ? AND r.id IS NULL ORDER BY a.starts_at LIMIT 1`,
-        [user.id, addMinutes(now, EARLY_CLOCK_IN_MINUTES), now],
+        `SELECT a.id, ${DT('a.starts_at')} AS starts_at, t.name FROM shift_assignments a JOIN shift_templates t ON t.id = a.template_id
+           LEFT JOIN attendance_records r ON r.assignment_id = a.id
+          WHERE a.user_id = ? AND a.venue_id = ? AND a.starts_at <= ? AND a.ends_at > ? AND r.id IS NULL ORDER BY a.starts_at LIMIT 1`,
+        [user.id, user.venueId, addMinutes(now, early), now],
       );
-      await conn.query('INSERT INTO attendance_records (venue_id, user_id, assignment_id, clock_in, source) VALUES (?, ?, ?, ?, ?)', [user.venueId, user.id, shifts[0]?.id ?? null, now, 'SELF']);
+      if (!shifts[0]) {
+        const next = await nextShift(user.id, now, conn);
+        throw new HttpError(409, 'NO_ASSIGNED_SHIFT', next
+          ? `Chưa tới giờ vào ca. Ca tới của bạn: ${next.name} ${next.starts_at.slice(8, 10)}/${next.starts_at.slice(5, 7)} lúc ${next.starts_at.slice(11, 16)}, được vào sớm tối đa ${early} phút.`
+          : 'Bạn không có ca nào được phân công lúc này. Liên hệ quản lý để được xếp ca.');
+      }
+      const late = minutesBetween(shifts[0].starts_at, now);
+      const [res] = await conn.query('INSERT INTO attendance_records (venue_id, user_id, assignment_id, clock_in, source) VALUES (?, ?, ?, ?, ?)', [user.venueId, user.id, shifts[0].id, now, 'SELF']);
+      await audit.log(conn, {
+        actorId: user.id, venueId: user.venueId, actionType: 'CLOCK_IN', entityType: 'ATTENDANCE', entityId: res.insertId,
+        newValues: { shift: shifts[0].name, shiftStart: shifts[0].starts_at, clockIn: now, lateMinutes: late > 0 ? late : 0 },
+      });
     });
   } catch (err) {
     // Bấm hai lần cùng lúc: ràng buộc một lượt đang mở chặn lượt thứ hai
@@ -175,12 +230,36 @@ async function clockIn(user) {
 async function clockOut(user) {
   const now = nowVN();
   await withTransaction(async (conn) => {
-    const [rows] = await conn.query(`SELECT id, ${DT('clock_in')} AS clock_in FROM attendance_records WHERE user_id = ? AND clock_out IS NULL FOR UPDATE`, [user.id]);
+    const [rows] = await conn.query(
+      `SELECT r.id, r.venue_id, ${DT('r.clock_in')} AS clock_in, ${DT('a.ends_at')} AS ends_at FROM attendance_records r
+         LEFT JOIN shift_assignments a ON a.id = r.assignment_id WHERE r.user_id = ? AND r.clock_out IS NULL FOR UPDATE`,
+      [user.id],
+    );
     if (!rows[0]) throw new HttpError(409, 'NOT_CLOCKED_IN', 'Bạn chưa vào ca');
+    // Ra ca muộn hơn giờ hết ca không được tính thêm: làm thêm phải được quản lý ghi nhận kèm lý do
     if (now <= rows[0].clock_in) throw new HttpError(409, 'TOO_SOON', 'Vừa vào ca, hãy thử lại sau ít giây');
-    await conn.query('UPDATE attendance_records SET clock_out = ? WHERE id = ?', [now, rows[0].id]);
+    // Ca bị dời giờ sau khi đã vào ca thì đóng lượt ngay sau giờ vào (không tính công), không để kẹt lượt mở
+    const capped = rows[0].ends_at && rows[0].ends_at < now ? rows[0].ends_at : now;
+    const out = capped > rows[0].clock_in ? capped : addMinutes(rows[0].clock_in, 1 / 60);
+    await conn.query('UPDATE attendance_records SET clock_out = ? WHERE id = ?', [out, rows[0].id]);
+    await audit.log(conn, { actorId: user.id, venueId: rows[0].venue_id, actionType: 'CLOCK_OUT', entityType: 'ATTENDANCE', entityId: rows[0].id, newValues: { clockOut: out } });
   });
   return myStatus(user);
+}
+
+// Tác vụ nền: hết giờ ca mà chưa ra ca thì tự kết thúc đúng tại giờ hết ca, để không tính lương sai
+async function autoClockOut() {
+  const now = nowVN();
+  const [rows] = await pool.query(
+    `SELECT r.id, r.user_id, r.venue_id, ${DT('GREATEST(a.ends_at, r.clock_in + INTERVAL 1 SECOND)')} AS ends_at FROM attendance_records r
+       JOIN shift_assignments a ON a.id = r.assignment_id WHERE r.clock_out IS NULL AND a.ends_at <= ?`,
+    [now],
+  );
+  for (const r of rows) {
+    const [res] = await pool.query("UPDATE attendance_records SET clock_out = ?, auto_closed = TRUE, note = 'Hệ thống tự kết thúc khi hết giờ ca' WHERE id = ? AND clock_out IS NULL", [r.ends_at, r.id]);
+    if (res.affectedRows) await audit.log(pool, { actorId: null, venueId: r.venue_id, actionType: 'AUTO_CLOCK_OUT', entityType: 'ATTENDANCE', entityId: r.id, newValues: { userId: r.user_id, clockOut: r.ends_at } });
+  }
+  return rows.length;
 }
 
 // Trạng thái của chính mình: lượt đang mở, lịch ca 7 ngày tới, tổng giờ trong tháng
@@ -191,9 +270,11 @@ async function myStatus(user) {
   const [shifts] = await pool.query(`${ASSIGNMENT_SELECT} WHERE a.user_id = ? AND a.work_date BETWEEN ? AND ? GROUP BY a.id ORDER BY a.starts_at`, [user.id, today, weekEnd]);
   const [records] = await pool.query(`${RECORD_SELECT} WHERE r.user_id = ? AND r.clock_in >= ? ORDER BY r.clock_in DESC`, [user.id, `${today.slice(0, 7)}-01 00:00:00`]);
   const list = records.map(toRecord);
+  const duty = await activeDuty(user);
   return {
-    now, open: list.find((r) => !r.clockOut) ?? null, shifts: shifts.map(toAssignment), records: list,
-    monthMinutes: list.reduce((s, r) => s + (r.minutes ?? 0), 0),
+    now, open: list.find((r) => !r.clockOut) ?? null, onDuty: Boolean(duty), dutyEndsAt: duty?.ends_at ?? null,
+    nextShift: duty ? null : await nextShift(user.id, now), earlyMinutes: await earlyMinutes(), lateGraceMinutes: await lateGraceMinutes(),
+    shifts: shifts.map(toAssignment), records: list, monthMinutes: list.reduce((s, r) => s + (r.minutes ?? 0), 0),
   };
 }
 
@@ -308,16 +389,17 @@ async function holidaysAround(month, db = pool) {
 // Các lượt đã ra ca của một người bắt đầu trong tháng, kèm độ dài ca theo lịch
 async function closedRecords(userId, month, db = pool) {
   const [rows] = await db.query(
-    `SELECT ${DT('r.clock_in')} AS clock_in, ${DT('r.clock_out')} AS clock_out, TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS shift_minutes
+    `SELECT ${DT('r.clock_in')} AS clock_in, ${DT('r.clock_out')} AS clock_out, ${DT('a.starts_at')} AS starts_at, r.source,
+            TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS shift_minutes
        FROM attendance_records r LEFT JOIN shift_assignments a ON a.id = r.assignment_id
       WHERE r.user_id = ? AND r.clock_out IS NOT NULL AND r.clock_in >= ? AND r.clock_in < DATE_ADD(?, INTERVAL 1 MONTH)`,
     [userId, `${month}-01`, `${month}-01`],
   );
   const [[{ open }]] = await db.query('SELECT COUNT(*) AS open FROM attendance_records WHERE user_id = ? AND clock_out IS NULL AND clock_in < DATE_ADD(?, INTERVAL 1 MONTH)', [userId, `${month}-01`]);
-  return { records: rows.map((r) => ({ clockIn: r.clock_in, clockOut: r.clock_out, shiftMinutes: r.shift_minutes })), open: Number(open) };
+  return { records: rows.map((r) => ({ clockIn: countedStart(r), clockOut: r.clock_out, shiftMinutes: r.shift_minutes })), open: Number(open) };
 }
 
 module.exports = {
-  listTemplates, saveTemplate, schedule, assign, unassign, clockIn, clockOut, myStatus, onDuty,
+  listTemplates, saveTemplate, schedule, assign, unassign, clockIn, clockOut, myStatus, onDuty, assertOnDuty, autoClockOut,
   listAttendance, addAttendance, updateAttendance, listHolidays, addHoliday, removeHoliday, holidaysAround, closedRecords, nowVN,
 };

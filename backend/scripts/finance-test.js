@@ -4,6 +4,7 @@
 require('dotenv').config({ quiet: true });
 const crypto = require('crypto');
 const mysql = require('mysql2/promise');
+const { putOnDuty } = require('./lib/duty');
 const { computePayslip, progressiveTax } = require('../src/utils/payroll');
 const { splitVat } = require('../src/services/invoice.service');
 
@@ -109,7 +110,9 @@ async function testInvoices(db, tokens) {
   expectError('Khách không xem được hóa đơn người khác', await call(`/invoices/${row.invoice_no}`, { token: customer }), 403, 'FORBIDDEN');
   expectError('Lễ tân không dùng được danh sách của khách', await call('/invoices/my', { token: staff }), 403, 'FORBIDDEN');
 
-  const other = await call('/bookings', { method: 'POST', token: admin, body: { courtId: 5, date: day(2), start: '08:00', end: '09:00', guestName: 'Khách TĐ', guestPhone: '0912000222', paymentMethod: 'CASH' } });
+  expectError('Admin không đặt sân tại quầy', await call('/bookings', { method: 'POST', token: admin, body: { courtId: 5, date: day(2), start: '08:00', end: '09:00', guestName: 'Khách TĐ', guestPhone: '0912000222', paymentMethod: 'CASH' } }), 403, 'ADMIN_NO_FRONTLINE');
+  const other = await call('/bookings', { method: 'POST', token: customer, body: { courtId: 5, date: day(2), start: '08:00', end: '09:00' } });
+  await call(`/payments/mock/${other.data.booking.bookingCode}/pay`, { method: 'POST', token: customer });
   const [[tdInvoice]] = await db.query('SELECT invoice_no FROM invoices i JOIN bookings b ON b.id = i.booking_id WHERE b.booking_code = ?', [other.data.booking.bookingCode]);
   expectError('Quản lý cơ sở này không xem được hóa đơn cơ sở khác', await call(`/invoices/${tdInvoice.invoice_no}`, { token: manager }), 403, 'FORBIDDEN');
   check('Admin xem được hóa đơn mọi cơ sở', (await call(`/invoices/${tdInvoice.invoice_no}`, { token: admin })).status === 200);
@@ -291,6 +294,7 @@ async function testLegalAndSite(db, tokens) {
     customer: await login('customer1@gmail.com'), staff: await login('staff.q7@pickleball.vn'),
     manager: await login('manager.q7@pickleball.vn'), admin: await login('admin@pickleball.vn'),
   };
+  await putOnDuty(BASE, { assignerToken: tokens.manager, userId: 3, userToken: tokens.staff });
   await testInvoices(db, tokens);
   const period = await testPayroll(tokens);
   await testReports(db, tokens, period);

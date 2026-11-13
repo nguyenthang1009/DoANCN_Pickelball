@@ -16,7 +16,7 @@ async function register(req, res) {
 }
 
 async function login(req, res) {
-  await startSession(res, await authService.login(req.body || {}));
+  await startSession(res, await authService.login({ ...(req.body || {}), ip: req.ip }));
 }
 
 // Đổi refresh token cũ lấy cặp token mới; tài khoản bị khóa không làm mới được phiên

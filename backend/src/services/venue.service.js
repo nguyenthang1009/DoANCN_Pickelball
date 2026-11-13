@@ -1,7 +1,7 @@
 const pool = require('../config/db');
 const HttpError = require('../utils/httpError');
 const withTransaction = require('../utils/transaction');
-const { toMinutes, hhmm, assertHalfHour } = require('../utils/time');
+const { toMinutes, hhmm, assertHalfHour, nowInVietnam } = require('../utils/time');
 const { assertRequired } = require('../utils/validators');
 const priceRuleService = require('./priceRule.service');
 const audit = require('./audit.service');
@@ -66,6 +66,27 @@ async function update(id, patch, actor) {
     };
     if (!next.name || !next.address) throw new HttpError(400, 'VALIDATION_ERROR', 'name và address không được rỗng');
     const { open, close } = validateHours(next.openTime, next.closeTime);
+
+    // Khách đã đặt phải được phục vụ: không ngừng cơ sở khi còn đơn sắp tới, không đổi giờ làm đơn đã đặt nằm ngoài giờ mở cửa
+    const now = nowInVietnam();
+    const [upcoming] = await conn.query(
+      `SELECT b.booking_code, DATE_FORMAT(s.booking_date, '%d/%m') AS day, TIME_TO_SEC(s.start_time) / 60 AS start_min, TIME_TO_SEC(s.end_time) / 60 AS end_min
+         FROM booking_slots s JOIN bookings b ON b.id = s.booking_id
+        WHERE s.venue_id = ? AND s.slot_status IN ('HELD', 'CONFIRMED') AND b.payment_status IN ('PAID', 'PENDING_PAYMENT')
+          AND (s.booking_date > ? OR (s.booking_date = ? AND s.end_time > ?))
+        ORDER BY s.booking_date, s.start_time`,
+      [id, now.date, now.date, `${now.time}:00`],
+    );
+    const codes = (rows) => [...new Set(rows.map((r) => r.booking_code))];
+    if (old.isActive && !next.isActive && upcoming.length) {
+      const list = codes(upcoming);
+      throw new HttpError(409, 'VENUE_HAS_BOOKINGS', `Còn ${list.length} đơn sắp tới (gần nhất ${list[0]} ngày ${upcoming[0].day}). Chuyển các sân sang bảo trì để hủy và hoàn tiền cho khách trước khi ngừng cơ sở`);
+    }
+    const outside = upcoming.filter((r) => Number(r.start_min) < open || Number(r.end_min) > close);
+    if (outside.length) {
+      const list = codes(outside);
+      throw new HttpError(409, 'BOOKINGS_OUTSIDE_HOURS', `Giờ mới làm ${list.length} đơn đã đặt nằm ngoài giờ mở cửa (${list.slice(0, 3).join(', ')}${list.length > 3 ? '…' : ''}). Đổi giờ sau khi các đơn này kết thúc`);
+    }
 
     // Đổi giờ mở cửa thì bảng giá của từng sân vẫn phải phủ kín giờ mới
     if (open !== toMinutes(old.openTime) || close !== toMinutes(old.closeTime)) {

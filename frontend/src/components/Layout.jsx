@@ -7,6 +7,7 @@ import { Icon } from './icons';
 import { Ball } from './motion';
 import { RouteProgress } from './RouteProgress';
 import { Spinner } from './ui';
+import { DutyBar, DutyProvider } from '../lib/duty';
 
 function Brand({ to = '/', light = false }) {
   return (
@@ -84,6 +85,7 @@ const MENU = [
     { to: '/quan-tri/phan-quyen', label: 'Phân quyền', icon: 'shield', any: ['role.manage'] },
     { to: '/quan-tri/noi-dung', label: 'Ảnh & nội dung', icon: 'image', any: ['site.manage'] },
     { to: '/quan-tri/tham-so', label: 'Tham số pháp lý', icon: 'scale', any: ['legal.manage'] },
+    { to: '/quan-tri/nhat-ky', label: 'Nhật ký hoạt động', icon: 'history', any: ['audit.view'] },
   ]],
 ];
 
@@ -98,6 +100,10 @@ function Clock() {
 }
 
 export function StaffLayout() {
+  return <DutyProvider><StaffShell /></DutyProvider>;
+}
+
+function StaffShell() {
   const { user, logout, can } = useAuth();
   const { notify } = useFeedback();
   const navigate = useNavigate();
@@ -153,6 +159,7 @@ export function StaffLayout() {
           <p className="min-w-0 truncate text-sm text-slate-600">{current?.group} <span className="px-1 text-slate-300">/</span> <span className="font-semibold text-slate-900">{current?.label}</span></p>
           <div className="ml-auto"><Clock /></div>
         </div>
+        <DutyBar />
         <main key={pathname} className="page-enter min-w-0 p-4 lg:p-8"><Outlet /></main>
       </div>
     </div>
@@ -166,6 +173,25 @@ export function RequireAccess({ any, internal = false, children }) {
   if (!ready) return <Spinner />;
   if (!user) return <Navigate to="/dang-nhap" replace />;
   if (user.mustChangePassword) return <Navigate to="/doi-mat-khau" replace />;
-  if ((internal && user.role === 'CUSTOMER') || (any && !can(...any))) return <Navigate to={homeFor(user)} replace />;
+  if (internal && user.role === 'CUSTOMER') return <Navigate to={homeFor(user)} replace />;
+  if (any && !can(...any)) return user.role === 'CUSTOMER' ? <Navigate to={homeFor(user)} replace /> : <Forbidden home={homeFor(user)} admin={user.role === 'ADMIN'} />;
   return children;
+}
+
+// Nhân sự mở trang không thuộc quyền của mình: báo rõ thay vì tự chuyển trang
+function Forbidden({ home, admin }) {
+  return (
+    <div className="mx-auto max-w-xl pt-6">
+      <div className="duty-gate rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+        <span className="duty-gate-icon"><Icon name="shield" className="h-8 w-8" /></span>
+        <h1 className="mt-4 text-2xl font-black italic">Không có quyền truy cập</h1>
+        <p className="mt-2 text-slate-600">
+          {admin
+            ? 'Tài khoản quản trị chỉ giám sát, không đặt sân, bán hàng hay check-in để không làm sai doanh thu. Các việc này do nhân sự cơ sở làm trong ca trực.'
+            : 'Vai trò của bạn chưa được cấp chức năng này. Nếu cần dùng, liên hệ Admin để được cấp quyền.'}
+        </p>
+        <Link to={home} className="mt-5 inline-flex rounded-lg bg-teal-700 px-5 py-2.5 font-semibold text-white hover:bg-teal-800">Về trang chính</Link>
+      </div>
+    </div>
+  );
 }

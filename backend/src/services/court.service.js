@@ -16,6 +16,23 @@ async function listByVenue(venueId) {
   return rows.map(toCourt);
 }
 
+// Đơn đã thanh toán đang diễn ra trên sân (đã tới giờ, chưa hết giờ), hoặc khách đã nhận sân mà chưa hết giờ chơi
+async function activeBookingOn(courtId, db = pool) {
+  const now = nowInVietnam();
+  const t = `${now.time}:00`;
+  const [rows] = await db.query(
+    `SELECT b.booking_code, TIME_FORMAT(MIN(s.start_time), '%H:%i') AS start_time, TIME_FORMAT(MAX(s.end_time), '%H:%i') AS end_time, b.checkin_status
+       FROM booking_slots s JOIN bookings b ON b.id = s.booking_id
+      WHERE s.court_id = ? AND s.booking_date = ? AND s.slot_status IN ('HELD', 'CONFIRMED') AND b.payment_status = 'PAID'
+      GROUP BY b.id, b.booking_code, b.checkin_status
+     HAVING MAX(s.end_time) > ? AND (MIN(s.start_time) <= ? OR b.checkin_status = 'CHECKED_IN')
+      ORDER BY MIN(s.start_time) LIMIT 1`,
+    [courtId, now.date, t, t],
+  );
+  const r = rows[0];
+  return r ? { bookingCode: r.booking_code, startTime: r.start_time, endTime: r.end_time, checkedIn: r.checkin_status === 'CHECKED_IN' } : null;
+}
+
 async function getOrThrow(id, db = pool) {
   const [rows] = await db.query('SELECT * FROM courts WHERE id = ?', [id]);
   if (!rows[0]) throw new HttpError(404, 'COURT_NOT_FOUND', 'Không tìm thấy sân');
@@ -90,6 +107,13 @@ async function changeStatus(court, { status, reason }, actor) {
   if (status === court.status) throw new HttpError(409, 'STATUS_UNCHANGED', `${court.name} đã ở trạng thái ${status}`);
 
   return withTransaction(async (conn) => {
+    await conn.query('SELECT id FROM courts WHERE id = ? FOR UPDATE', [court.id]);
+    if (status !== 'ACTIVE') {
+      const playing = await activeBookingOn(court.id, conn);
+      if (playing) {
+        throw new HttpError(409, 'COURT_IN_USE', `${court.name} đang có khách chơi tới ${playing.endTime} (đơn ${playing.bookingCode}). Chờ hết giờ chơi rồi mới đóng sân để không làm gián đoạn khách`);
+      }
+    }
     await conn.query('UPDATE courts SET status = ? WHERE id = ?', [status, court.id]);
 
     const affected = [];
@@ -138,4 +162,4 @@ async function remove(court, actor) {
   });
 }
 
-module.exports = { listByVenue, getOrThrow, create, update, changeStatus, remove };
+module.exports = { listByVenue, getOrThrow, create, update, changeStatus, remove, activeBookingOn };

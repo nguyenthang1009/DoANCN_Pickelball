@@ -22,7 +22,8 @@ async function update(req, res) {
 }
 
 async function impact(req, res) {
-  res.json({ court: req.court, bookings: await bookingService.courtImpact(req.court) });
+  const { bookings, playing } = await bookingService.courtImpact(req.court);
+  res.json({ court: req.court, bookings, playing });
 }
 
 async function changeStatus(req, res) {
@@ -41,8 +42,8 @@ async function listPriceRules(req, res) {
 
 async function replacePriceRules(req, res) {
   const venue = await venueService.getOrThrow(req.court.venueId);
-  const rules = await priceRuleService.replaceForCourt(req.court, venue, (req.body || {}).rules, req.user);
-  res.json({ courtId: req.court.id, rules });
+  const { rules, keptSlots } = await priceRuleService.replaceForCourt(req.court, venue, (req.body || {}).rules, req.user);
+  res.json({ courtId: req.court.id, rules, keptSlots });
 }
 
 async function quote(req, res) {

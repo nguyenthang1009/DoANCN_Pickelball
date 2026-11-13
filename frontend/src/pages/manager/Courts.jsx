@@ -99,48 +99,112 @@ export default function Courts() {
   );
 }
 
-// Bảng giá phủ kín giờ mở cửa cho ngày thường và cuối tuần; server kiểm tra hở/chồng lấn
+// Bảng giá phủ kín giờ mở cửa cho ngày thường và cuối tuần; server kiểm tra hở/chồng lấn.
+// Xóa một khung thì giờ của khung đó gộp vào khung liền trước (hoặc liền sau nếu là khung đầu) để không bỏ trống giờ nào.
+// Đơn đã đặt chốt giá theo từng ô lúc giữ chỗ, nên sửa hay xóa khung không làm đổi tiền của khách đã đặt.
+const DAY_LABEL = { WEEKDAY: 'Ngày thường (T2–T6)', WEEKEND: 'Cuối tuần & ngày lễ' };
+const DAY_NAME = { WEEKDAY: 'ngày thường', WEEKEND: 'cuối tuần và ngày lễ' };
+
 function PriceEditor({ court, venue, onSaved, onClose }) {
+  const { notify, confirm } = useFeedback();
   const [rules, setRules] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [dirty, setDirty] = useState(false);
   useEffect(() => { api(`/courts/${court.id}/price-rules`).then((d) => setRules(d.rules.map(({ dayType, startTime, endTime, pricePerHour }) => ({ dayType, startTime, endTime, pricePerHour })))).catch((e) => setError(e.message)); }, [court.id]);
-  const update = (i, k, v) => setRules(rules.map((r, j) => (j === i ? { ...r, [k]: k === 'pricePerHour' ? Number(v) : v } : r)));
+  const change = (next) => { setRules(next); setDirty(true); };
+  const update = (i, k, v) => change(rules.map((r, j) => (j === i ? { ...r, [k]: k === 'pricePerHour' ? Number(v) : v } : r)));
+
+  // Thêm khung bằng cách chia đôi khung dài nhất (tròn 30 phút), nên bảng giá luôn liền mạch
+  function addFrame(dt) {
+    const toMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+    const toHHMM = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    const candidates = rules.map((r, j) => ({ ...r, j, len: toMin(r.endTime) - toMin(r.startTime) })).filter((r) => r.dayType === dt && r.len >= 60);
+    if (!candidates.length) { notify.error('Các khung đều chỉ 30 phút, không chia thêm được'); return; }
+    const longest = candidates.reduce((a, b) => (b.len > a.len ? b : a));
+    const mid = toMin(longest.startTime) + Math.round(longest.len / 60) * 30;
+    const next = rules.map((r, j) => (j === longest.j ? { ...r, endTime: toHHMM(mid) } : r));
+    change([...next, { dayType: dt, startTime: toHHMM(mid), endTime: longest.endTime, pricePerHour: longest.pricePerHour }].sort((x, y) => x.dayType.localeCompare(y.dayType) || x.startTime.localeCompare(y.startTime)));
+  }
+
+  async function removeFrame(i) {
+    const target = rules[i];
+    const sameDay = rules.map((r, j) => ({ ...r, j })).filter((r) => r.dayType === target.dayType).sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const pos = sameDay.findIndex((r) => r.j === i);
+    const neighbour = sameDay[pos - 1] ?? sameDay[pos + 1];
+    const merged = pos > 0 ? { ...neighbour, endTime: target.endTime } : { ...neighbour, startTime: target.startTime };
+    const ok = await confirm({
+      title: `Xóa khung ${target.startTime}–${target.endTime}?`,
+      message: `Giờ của khung này gộp vào khung bên cạnh để giá ${DAY_NAME[target.dayType]} không bị trống giờ. Đơn khách đã đặt giữ nguyên giá đã chốt. Bấm "Lưu bảng giá" để áp dụng.`,
+      details: [
+        ['Khung bị xóa', `${target.startTime}–${target.endTime} · ${vnd(target.pricePerHour)}/giờ`],
+        ['Sau khi gộp', `${merged.startTime}–${merged.endTime} · ${vnd(merged.pricePerHour)}/giờ`],
+      ],
+      tone: 'warning',
+      confirmText: 'Xóa khung',
+      cancelText: 'Giữ lại',
+    });
+    if (!ok) return;
+    change(rules.map((r, j) => (j === neighbour.j ? { dayType: r.dayType, startTime: merged.startTime, endTime: merged.endTime, pricePerHour: r.pricePerHour } : r)).filter((_, j) => j !== i));
+  }
 
   async function save() {
     const ok = await confirm({
       title: `Lưu bảng giá ${court.name}?`,
-      message: 'Giá mới áp dụng từ đơn đặt sau. Các đơn đã giữ chỗ hoặc đã thanh toán giữ nguyên giá cũ.',
+      message: 'Giá mới áp dụng cho đơn đặt từ bây giờ. Đơn đã giữ chỗ hoặc đã thanh toán giữ nguyên giá đã chốt, kể cả khách đang chơi.',
       tone: 'warning',
       confirmText: 'Lưu bảng giá',
     });
     if (!ok) return;
     setBusy(true); setError('');
-    try { await api(`/courts/${court.id}/price-rules`, { method: 'PUT', body: { rules } }); onSaved(`Đã lưu bảng giá ${court.name}`); } catch (e) { setError(e.message); } finally { setBusy(false); }
+    try {
+      const r = await api(`/courts/${court.id}/price-rules`, { method: 'PUT', body: { rules } });
+      onSaved(`Đã lưu bảng giá ${court.name}${r.keptSlots ? `. ${r.keptSlots} ô đã đặt sắp tới giữ nguyên giá cũ` : ''}`);
+    } catch (e) { setError(e.message); notify.error(e.message); } finally { setBusy(false); }
+  }
+
+  async function close() {
+    if (dirty && !(await confirm({ title: 'Bỏ thay đổi bảng giá?', message: 'Các khung vừa sửa hoặc xóa chưa được lưu.', tone: 'warning', confirmText: 'Bỏ thay đổi', cancelText: 'Tiếp tục sửa' }))) return;
+    onClose();
   }
 
   return (
     <Card className="flex flex-col gap-3">
-      <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">Bảng giá · {court.name}</h2><button type="button" onClick={onClose} className="text-sm text-slate-600">Đóng</button></div>
+      <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">Bảng giá · {court.name}</h2><button type="button" onClick={close} className="text-sm text-slate-600">Đóng</button></div>
       <Alert>{error}</Alert>
-      {!rules ? <Spinner /> : ['WEEKDAY', 'WEEKEND'].map((dt) => (
-        <div key={dt} className="flex flex-col gap-2">
-          <p className="text-sm font-semibold">{dt === 'WEEKDAY' ? 'Ngày thường (T2–T6)' : 'Cuối tuần & ngày lễ'}</p>
-          {rules.map((r, i) => r.dayType === dt && (
-            <div key={i} className="flex items-center gap-2">
-              <input aria-label="Giờ bắt đầu" type="time" step="1800" value={r.startTime} onChange={(e) => update(i, 'startTime', e.target.value)} className="h-10 rounded-lg border border-slate-200 px-2" />
-              <span>–</span>
-              <input aria-label="Giờ kết thúc" type="time" step="1800" value={r.endTime} onChange={(e) => update(i, 'endTime', e.target.value)} className="h-10 rounded-lg border border-slate-200 px-2" />
-              <input aria-label="Giá mỗi giờ" type="number" step="1000" min="1000" value={r.pricePerHour} onChange={(e) => update(i, 'pricePerHour', e.target.value)} className="h-10 w-28 rounded-lg border border-slate-200 px-2" />
-              <span className="text-xs text-slate-600">đ/giờ</span>
-              <button type="button" aria-label="Xóa khung" onClick={() => setRules(rules.filter((_, j) => j !== i))} className="text-red-700">✕</button>
-            </div>
-          ))}
-          <button type="button" className="self-start text-sm font-semibold text-teal-700" onClick={() => setRules([...rules, { dayType: dt, startTime: venue?.openTime || '06:00', endTime: venue?.closeTime || '22:00', pricePerHour: 100000 }])}>+ Thêm khung giờ</button>
-        </div>
-      ))}
+      {!rules ? <Spinner /> : ['WEEKDAY', 'WEEKEND'].map((dt) => {
+        const count = rules.filter((r) => r.dayType === dt).length;
+        return (
+          <div key={dt} className="flex flex-col gap-2">
+            <p className="text-sm font-semibold">{DAY_LABEL[dt]}</p>
+            {rules.map((r, i) => r.dayType === dt && (
+              <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 p-2">
+                <div className="flex min-w-[220px] flex-1 items-center gap-2">
+                  <input aria-label="Giờ bắt đầu" type="time" step="1800" value={r.startTime} onChange={(e) => update(i, 'startTime', e.target.value)} className="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 px-2" />
+                  <span>–</span>
+                  <input aria-label="Giờ kết thúc" type="time" step="1800" value={r.endTime} onChange={(e) => update(i, 'endTime', e.target.value)} className="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 px-2" />
+                </div>
+                <div className="flex flex-1 items-center gap-2">
+                <input aria-label="Giá mỗi giờ" type="number" step="1000" min="1000" value={r.pricePerHour} onChange={(e) => update(i, 'pricePerHour', e.target.value)} className="h-10 w-28 rounded-lg border border-slate-200 px-2" />
+                <span className="flex-1 text-xs text-slate-600">đ/giờ</span>
+                <button
+                  type="button"
+                  aria-label={`Xóa khung ${r.startTime}–${r.endTime}`}
+                  title={count === 1 ? 'Phải còn ít nhất một khung giá' : 'Xóa khung, giờ gộp vào khung bên cạnh'}
+                  disabled={count === 1}
+                  onClick={() => removeFrame(i)}
+                  className="rounded-lg px-2 py-1 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
+                >Xóa</button>
+                </div>
+              </div>
+            ))}
+            <button type="button" className="self-start text-sm font-semibold text-teal-700" onClick={() => addFrame(dt)}>+ Thêm khung giờ</button>
+          </div>
+        );
+      })}
       <p className="text-xs text-slate-600">Giá mỗi ô 30 phút = giá giờ ÷ 2, ví dụ 180.000đ/giờ → {vnd(90000)}/ô. Đơn đã đặt giữ nguyên giá cũ.</p>
-      <Button loading={busy} onClick={save} disabled={!rules}>Lưu bảng giá</Button>
+      {dirty && <Alert kind="warning">Có thay đổi chưa lưu.</Alert>}
+      <Button loading={busy} onClick={save} disabled={!rules || !dirty}>Lưu bảng giá</Button>
     </Card>
   );
 }

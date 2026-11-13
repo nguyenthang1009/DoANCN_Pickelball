@@ -193,7 +193,7 @@ function Records({ venueId, query }) {
       {!records ? <Spinner /> : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-sm">
-            <thead className="text-xs text-slate-600"><tr>{['Nhân sự', 'Ngày', 'Vào', 'Ra', 'Thời gian', 'Ca', 'Ghi chú', ''].map((h) => <th key={h} className="px-4 py-2 text-left font-medium">{h}</th>)}</tr></thead>
+            <thead className="text-xs text-slate-600"><tr>{['Nhân sự', 'Ngày', 'Vào', 'Ra', 'Tính công', 'Ca', 'Ghi chú', ''].map((h) => <th key={h} className="px-4 py-2 text-left font-medium">{h}</th>)}</tr></thead>
             <tbody>
               {records.length === 0 && <tr><td colSpan={8} className="px-4 py-6 text-center text-slate-600">Chưa có chấm công trong tháng.</td></tr>}
               {records.map((r) => (
@@ -204,7 +204,13 @@ function Records({ venueId, query }) {
                   <td className="px-4 py-2 tabular-nums">{r.clockOut ? `${clock(r.clockOut)}${r.clockOut.slice(0, 10) !== r.clockIn.slice(0, 10) ? ' (+1)' : ''}` : <Badge tone="green">Đang làm</Badge>}</td>
                   <td className="px-4 py-2">{r.minutes !== null ? duration(r.minutes) : '–'}</td>
                   <td className="px-4 py-2">{r.shiftName ?? 'Ngoài lịch'}</td>
-                  <td className="px-4 py-2 text-xs text-slate-600">{r.source === 'MANAGER' ? r.note : 'Tự chấm'}</td>
+                  <td className="px-4 py-2 text-xs text-slate-600">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {r.lateMinutes > 5 && <Badge tone="amber">Trễ {r.lateMinutes} phút</Badge>}
+                      {r.autoClosed && <Badge tone="red">Quên ra ca</Badge>}
+                      <span>{r.source === 'MANAGER' ? r.note : r.autoClosed ? 'Tự kết thúc lúc hết ca' : 'Tự chấm'}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-2 text-right">{r.userId !== user.id && <Button kind="ghost" className="px-3 py-1 text-sm" onClick={() => setEditing(r)}>Sửa</Button>}</td>
                 </tr>
               ))}

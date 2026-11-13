@@ -138,6 +138,12 @@ function PeriodView({ id, onChanged }) {
     } catch (e) { notify.error(e.message); }
   }
 
+  async function remove() {
+    const ok = await confirm({ title: `Xóa bảng lương nháp tháng ${period.month}?`, message: 'Dùng khi tạo nhầm tháng hoặc nhầm ngày công chuẩn. Bảng lương đã duyệt thì không xóa được.', tone: 'danger', confirmText: 'Xóa bảng lương' });
+    if (!ok) return;
+    try { await api(`/payroll/periods/${id}`, { method: 'DELETE' }); notify.success(`Đã xóa bảng lương tháng ${period.month}`); onChanged(true); } catch (e) { notify.error(e.message); }
+  }
+
   async function act(path, options, ok) {
     if (!(await confirm(options))) return;
     try { setPeriod((await api(`/payroll/periods/${id}/${path}`, { method: 'POST', body: {} })).period); notify.success(ok); onChanged(); } catch (e) { notify.error(e.message); }
@@ -155,6 +161,7 @@ function PeriodView({ id, onChanged }) {
         <h2 className="flex items-center gap-3 text-xl font-bold">Tháng {period.month} <Badge tone={tone}>{label}</Badge></h2>
         <div className="flex flex-wrap gap-2">
           {period.status === 'DRAFT' && can('payroll.manage') && <Button kind="secondary" onClick={sync}>Tính lại từ chấm công</Button>}
+          {period.status === 'DRAFT' && can('payroll.manage') && <Button kind="ghost" className="text-red-700" onClick={remove}>Xóa nháp</Button>}
           {period.status === 'DRAFT' && can('payroll.approve') && period.createdBy !== user.id && (
             <Button onClick={() => act('approve', { title: `Duyệt lương tháng ${period.month}?`, message: 'Số liệu sẽ bị khóa và ghi vào sổ cái. Thao tác này không hoàn tác được.', details, tone: 'warning', confirmText: 'Duyệt bảng lương' }, 'Đã duyệt bảng lương')}>Duyệt bảng lương</Button>
           )}
@@ -248,7 +255,7 @@ function Periods({ scope }) {
           ))}
         </Card>
       </div>
-      <div className="min-w-0">{selected ? <PeriodView key={selected} id={selected} onChanged={load} /> : <Card><p className="text-sm text-slate-600">Chọn hoặc tạo một bảng lương.</p></Card>}</div>
+      <div className="min-w-0">{selected ? <PeriodView key={selected} id={selected} onChanged={(removed) => { if (removed) setSelected(null); load(); }} /> : <Card><p className="text-sm text-slate-600">Chọn hoặc tạo một bảng lương.</p></Card>}</div>
     </div>
   );
 }

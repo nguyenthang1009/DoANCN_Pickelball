@@ -94,4 +94,4 @@ async function saveSettings(values, actor) {
   return settingsMap();
 }
 
-module.exports = { sellerInfo, content, replaceImage, updateMeta, resetImage, saveSettings, UPLOAD_DIR };
+module.exports = { sellerInfo, content, replaceImage, updateMeta, resetImage, saveSettings, UPLOAD_DIR, detectImageType };

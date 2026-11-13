@@ -14,7 +14,8 @@ async function start() {
   realtime.init(server); // Socket.io: đổi màu ô ngay trên mọi màn hình
 
   // Job nền: hết hạn giữ chỗ 10 phút (BR08) và đánh dấu không đến (BR12)
-  const tick = () => Promise.all([bookingService.runHousekeeping(), sessionService.purgeExpired()]).catch((err) => console.error('Housekeeping lỗi:', err.message));
+  // và tự kết thúc ca trực đã hết giờ mà nhân viên quên ra ca
+  const tick = () => Promise.all([bookingService.runHousekeeping(), sessionService.purgeExpired(), require('./services/shift.service').autoClockOut()]).catch((err) => console.error('Housekeeping lỗi:', err.message));
   setInterval(tick, jobIntervalSeconds * 1000).unref();
   tick();
 

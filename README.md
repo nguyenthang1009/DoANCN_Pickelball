@@ -46,13 +46,33 @@ Mở `http://localhost:5173`. Vite chuyển `/api` và `/socket.io` sang backend
 | Vai trò | Trang chính |
 | --- | --- |
 | Khách hàng | Trang chủ `/`, ma trận chọn sân `/dat-san`, thanh toán VietQR, vé QR, lịch đặt, hóa đơn của tôi |
-| Lễ tân | POS đặt tại quầy, check-in QR, bán dịch vụ, đơn trong ngày, doanh thu ca, hóa đơn cơ sở, phiếu lương của mình, xem đèn sân, tự chấm công |
-| Quản lý | Như lễ tân + tổng quan doanh thu, sân & bảng giá, dịch vụ, hoàn tiền, tài chính, lập bảng lương, điều khiển đèn, xếp ca và sửa chấm công (cơ sở của mình) |
-| Admin | Như quản lý cho mọi cơ sở + cụm sân, tài khoản, phân quyền, duyệt lương, đối soát, tham số pháp lý, ảnh và nội dung |
+| Lễ tân | POS đặt tại quầy, check-in QR, bán dịch vụ (chỉ khi đang trong ca), đơn trong ngày, doanh thu ca, hóa đơn cơ sở, phiếu lương của mình, xem đèn sân, tự chấm công |
+| Quản lý | Như lễ tân + tổng quan doanh thu, sân & bảng giá, dịch vụ và ảnh món, hoàn tiền, tài chính, lập và xóa bảng lương nháp, điều khiển đèn, xếp ca và sửa chấm công (cơ sở của mình) |
+| Admin | Giám sát mọi cơ sở: cụm sân, tài khoản (tạo, sửa, khóa, đặt lại mật khẩu), phân quyền, xếp ca, duyệt lương, đối soát, tham số pháp lý, ảnh và nội dung, nhật ký hoạt động và cảnh báo bất thường. Không đặt sân, bán hàng, check-in, chấm công |
 
 Menu và trang được ẩn hiện theo quyền của tài khoản, nên vai trò tự tạo (VD: Thu ngân) chỉ thấy đúng chức năng được cấp.
 
-Mọi thao tác hiện thông báo kết quả. Thao tác nhạy cảm (hủy đơn, thu tiền, hoàn tiền, khóa tài khoản, đổi vai trò, đổi quyền, đổi giá, xóa sân, bảo trì) phải qua hộp xác nhận: dùng `useFeedback()` trong `frontend/src/lib/feedback.jsx`, không dùng `window.confirm`. Hiệu ứng động tự tắt khi người dùng bật giảm chuyển động trong hệ điều hành.
+Mọi thao tác hiện thông báo kết quả. Thao tác nhạy cảm (hủy đơn, thu tiền, hoàn tiền, khóa tài khoản, đổi vai trò, đổi quyền, đổi giá, xóa khung giá, xóa sân, bảo trì) phải qua hộp xác nhận: dùng `useFeedback()` trong `frontend/src/lib/feedback.jsx`, không dùng `window.confirm`. Hiệu ứng động tự tắt khi người dùng bật giảm chuyển động trong hệ điều hành.
+
+## Bảo vệ khách đang chơi
+
+Các thao tác xóa, sửa của quản lý và Admin bị chặn ở backend khi có thể làm ảnh hưởng khách đã đặt (giao diện cũng ẩn hoặc khóa nút và nói rõ lý do):
+
+| Thao tác | Quy tắc |
+| --- | --- |
+| Đặt bảo trì, ngừng sân | Không làm được khi sân đang có khách chơi (đã tới giờ hoặc đã nhận sân, chưa hết giờ). Hộp bảo trì báo khách chơi tới mấy giờ. Đơn sắp tới thì đổi sân hoặc hủy, hoàn tiền như cũ |
+| Hủy đơn đã thanh toán | Chỉ trước giờ chơi. Đã tới giờ thì không hủy được; khách không đến thì hệ thống tự ghi nhận vắng mặt |
+| Đổi sân cho đơn | Chỉ trước giờ chơi và khi chưa nhận sân |
+| Xóa sân | Chỉ sân chưa từng có lịch đặt; sân đã có lịch sử thì chuyển ngừng sử dụng |
+| Sửa, xóa khung giá | Xóa một khung thì giờ của khung đó gộp vào khung liền trước (hoặc liền sau), nên bảng giá luôn phủ kín giờ mở cửa. Thêm khung thì chia đôi khung dài nhất. Đơn đã đặt chốt giá theo từng ô lúc giữ chỗ nên không đổi tiền; lưu xong báo số ô đã đặt giữ giá cũ |
+| Tạm ngừng cơ sở | Không làm được khi còn đơn sắp tới |
+| Đổi giờ mở cửa | Không làm được nếu giờ mới làm đơn đã đặt nằm ngoài giờ mở cửa |
+| Chỉnh đèn tay | Khi sân đang có khách, chỉnh tay chỉ tăng sáng được, không tắt hay giảm dưới mức Fuzzy tính |
+| Khóa tài khoản nhân sự | Đang trong ca thì lượt chấm công kết thúc ngay lúc khóa |
+| Đổi vai trò, chuyển cơ sở | Không làm được khi nhân sự đang trong ca |
+| Ra ca | Luôn được phép khi đang có lượt mở, kể cả khi vai trò vừa bị gỡ quyền chấm công |
+| Xóa ca đã xếp | Ca đã có chấm công thì không xóa được |
+| Xóa bảng lương | Chỉ bảng còn nháp |
 
 ## API
 
@@ -66,6 +86,9 @@ Mọi thao tác hiện thông báo kết quả. Thao tác nhạy cảm (hủy đ
 | GET, POST | `/admin/users` | ADMIN |
 | PATCH | `/admin/users/:id` | ADMIN (khóa / mở khóa) |
 | PATCH | `/admin/users/:id/role` | ADMIN (đổi vai trò) |
+| PATCH | `/admin/users/:id/profile` | ADMIN (sửa họ tên, SĐT, cơ sở; không chuyển cơ sở khi đang trong ca) |
+| POST | `/admin/users/:id/reset-password` | ADMIN (cấp mật khẩu tạm, đăng xuất mọi thiết bị) |
+| GET | `/admin/activity`, `/admin/activity/alerts` | ADMIN (nhật ký hoạt động, cảnh báo bất thường) |
 | GET, POST | `/admin/roles` | ADMIN (ma trận quyền, tạo vai trò) |
 | PUT, DELETE | `/admin/roles/:id` | ADMIN |
 | GET | `/admin/venues` | ADMIN (cả cơ sở đã ngừng) |
@@ -77,23 +100,24 @@ Mọi thao tác hiện thông báo kết quả. Thao tác nhạy cảm (hủy đ
 | GET | `/courts/:courtId`, `/courts/:courtId/price-rules` | Công khai |
 | GET | `/courts/:courtId/quote?date=YYYY-MM-DD&start=HH:MM&end=HH:MM` | Công khai (báo giá) |
 | PATCH, DELETE | `/courts/:courtId` | ADMIN, MANAGER của đúng cơ sở |
-| GET | `/courts/:courtId/impact` | ADMIN, MANAGER của đúng cơ sở (đơn bị ảnh hưởng, sân thay thế) |
+| GET | `/courts/:courtId/impact` | ADMIN, MANAGER của đúng cơ sở (đơn bị ảnh hưởng, sân thay thế, đơn đang chơi `playing`) |
 | PATCH | `/courts/:courtId/status` | ADMIN, MANAGER của đúng cơ sở (bảo trì) |
-| PUT | `/courts/:courtId/price-rules` | ADMIN, MANAGER của đúng cơ sở |
+| PUT | `/courts/:courtId/price-rules` | ADMIN, MANAGER của đúng cơ sở (thay cả bảng; thêm, sửa, xóa khung; trả về `keptSlots`) |
 | GET | `/venues/:venueId/services` | ADMIN, MANAGER, STAFF của đúng cơ sở |
 | POST | `/venues/:venueId/services` | ADMIN, MANAGER của đúng cơ sở |
 | PATCH | `/services/:serviceId` | ADMIN, MANAGER của đúng cơ sở |
-| POST | `/bookings` | CUSTOMER (online); STAFF, MANAGER, ADMIN (tại quầy, kèm `guestName`, `guestPhone`, `paymentMethod`, `services`) |
+| PUT, DELETE | `/services/:serviceId/image` | ADMIN, MANAGER của đúng cơ sở (ảnh món JPG, PNG, WebP tối đa 6 MB) |
+| POST | `/bookings` | CUSTOMER (online); STAFF, MANAGER đang trong ca (tại quầy, kèm `guestName`, `guestPhone`, `paymentMethod`, `services`) |
 | GET | `/bookings/my` | CUSTOMER |
 | GET | `/bookings/:code` | Chủ đơn, nhân sự cơ sở của đơn, ADMIN |
 | POST | `/bookings/:code/cancel` | Chủ đơn (trước 24 giờ nếu đã thanh toán); MANAGER, ADMIN (cần lý do) |
-| POST | `/bookings/:code/payment-link` | Chủ đơn, nhân sự cơ sở |
-| POST | `/bookings/:code/check-in` | STAFF, MANAGER, ADMIN của đúng cơ sở |
+| POST | `/bookings/:code/payment-link` | Chủ đơn, nhân sự cơ sở đang trong ca |
+| POST | `/bookings/:code/check-in` | STAFF, MANAGER của đúng cơ sở, đang trong ca |
 | GET | `/bookings/refunds`, POST `/bookings/:code/refund` | MANAGER, ADMIN |
 | POST | `/bookings/:code/move` | MANAGER, ADMIN của đúng cơ sở (đổi sân, giữ nguyên giá) |
 | GET | `/venues/:venueId/bookings?date=` | STAFF, MANAGER, ADMIN của đúng cơ sở |
-| POST | `/venues/:venueId/service-orders` | STAFF, MANAGER, ADMIN của đúng cơ sở (bán lẻ) |
-| POST | `/checkin/lookup` | STAFF, MANAGER, ADMIN (quét QR hoặc nhập mã đơn) |
+| POST | `/venues/:venueId/service-orders` | STAFF, MANAGER của đúng cơ sở, đang trong ca (bán lẻ) |
+| POST | `/checkin/lookup` | STAFF, MANAGER đang trong ca (quét QR hoặc nhập mã đơn) |
 | POST | `/payments/payos/webhook` | PayOS (xác thực bằng chữ ký HMAC) |
 | POST | `/payments/mock/:code/pay` | Chỉ chế độ mock |
 | GET | `/reports/shift?date=` | STAFF (ca của mình), MANAGER (cơ sở), ADMIN (toàn hệ thống) |
@@ -133,7 +157,9 @@ Dành cho Admin: dự báo doanh thu từng ngày và tăng trưởng 30 ngày t
 ## Ca làm và chấm công
 
 - **Xếp ca:** mẫu ca theo cơ sở (sáng, chiều, đêm trực), lịch tuần cho từng nhân sự, chặn xếp trùng giờ. Ca chốt giờ lúc xếp nên sửa mẫu ca không đổi lịch cũ.
-- **Chấm công:** nhân viên tự vào ca, ra ca trên trang Chấm công. Vào trong khung giờ ca (sớm tối đa 30 phút) thì tự gắn với ca. Mỗi người chỉ có một lượt đang mở; CSDL chặn bằng ràng buộc duy nhất nên bấm nhiều lần cùng lúc vẫn chỉ ghi một lượt.
+- **Chấm công:** nhân viên chỉ vào ca được khi đã được xếp ca hôm đó tại cơ sở của mình, từ 15 phút trước giờ bắt đầu ca (`CLOCK_IN_EARLY_MINUTES`) tới giờ hết ca. Chưa được xếp ca thì không vào được, tránh người khác vào làm thay. Giờ công tính từ giờ bắt đầu ca dù vào sớm; vào trễ quá 5 phút (`LATE_GRACE_MINUTES`) bị đánh dấu đi muộn. Mỗi người chỉ có một lượt đang mở; CSDL chặn bằng ràng buộc duy nhất nên bấm nhiều lần cùng lúc vẫn chỉ ghi một lượt.
+- **Tự kết thúc ca:** ra ca muộn chỉ tính tới giờ hết ca. Quên ra ca thì tác vụ nền (mỗi phút) tự kết thúc lượt đúng giờ hết ca và đánh dấu "Quên ra ca", nên lương không bị tính dư.
+- **Chỉ thao tác khi đang trong ca:** đặt sân tại quầy, bán dịch vụ, check-in, tạo link thu tiền chỉ làm được khi đang trong ca được phân công (quyền có cờ `requires_shift`). Ngoài ca, giao diện hiện thẻ "Bạn chưa vào ca" kèm giờ ca tới; hết giờ ca thì tự khóa lại.
 - **Đang trong ca:** quản lý xem ai đang làm, từ mấy giờ.
 - **Sửa chấm công:** quản lý ghi bù, sửa giờ, bắt buộc ghi lý do, có nhật ký. Không tự sửa chấm công của mình, không sửa tháng đã duyệt lương.
 - **Bảng công:** tổng hợp từng ngày theo luật: tối đa 8 giờ thường một ngày, phần vượt là làm thêm; ngày nghỉ hằng tuần và ngày lễ là làm thêm; ban đêm 22h-6h; lễ trùng ngày nghỉ hằng tuần thì nghỉ bù ngày kế tiếp. Nút "Tính lại từ chấm công" trên bảng lương đổ thẳng số giờ vào phiếu lương.
@@ -142,7 +168,7 @@ Dành cho Admin: dự báo doanh thu từng ngày và tăng trưởng 30 ngày t
 
 ## Chiếu sáng thông minh
 
-Fuzzy Logic (Mamdani, giải mờ trọng tâm) chỉnh độ sáng đèn từng sân theo ánh sáng môi trường, mức hoạt động trên sân và lịch đặt sân. Đèn chỉ sáng khi có đơn đã thanh toán, có người trên sân mà không có đơn thì báo lễ tân. Có thể nối đèn Yeelight qua mạng LAN. Thiết kế, bảng luật và ví dụ tính tay: [docs/fuzzy-lighting.md](docs/fuzzy-lighting.md).
+Fuzzy Logic (Mamdani, giải mờ trọng tâm) chỉnh độ sáng đèn từng sân theo ánh sáng môi trường, mức hoạt động trên sân và lịch đặt sân. Đèn chỉ sáng khi có đơn đã thanh toán, có người trên sân mà không có đơn thì báo lễ tân. Có thể nối đèn Yeelight qua mạng LAN. Thiết kế, bảng luật và ví dụ tính tay: [docs/fuzzy-lighting.md](docs/fuzzy-lighting.md). Nối bóng đèn thật: [docs/ket-noi-den-yeelight.md](docs/ket-noi-den-yeelight.md).
 
 Giả lập thiết bị IoT gửi số đo cảm biến (đặt `IOT_DEVICE_KEY` trong `.env` trước):
 
@@ -159,11 +185,28 @@ Admin tạo vai trò mới và tích quyền trên màn Phân quyền. Các ch�
 
 - Vai trò tự tạo chỉ có phạm vi theo cơ sở, không có cấp toàn chuỗi.
 - Quyền quản trị (`admin_only`) không gán được cho vai trò khác ngoài Admin.
+- Quyền tại quầy (`frontline`: đặt sân tại quầy, bán dịch vụ, check-in, chấm công) Admin không dùng được, vì đơn tạo ra là doanh thu thật của cơ sở, nhưng Admin vẫn cấp được cho vai trò nhân sự.
 - Chỉ cấp hoặc gỡ được quyền mình đang có.
 - Không tự sửa vai trò của mình, không tự đổi vai trò của mình.
 - Vai trò Admin không sửa được; vai trò hệ thống và vai trò đang dùng không xóa được.
 - Hệ thống luôn còn ít nhất một Admin hoạt động.
-- Mọi thay đổi ghi `audit_logs`.
+- Mọi thay đổi ghi `audit_logs`. Bảng này chỉ thêm được, trigger trong CSDL chặn sửa và xóa.
+
+## Nhật ký hoạt động
+
+Admin xem ở mục **Nhật ký hoạt động**: ai làm gì, lúc nào, ở cơ sở nào, trên đơn nào, kèm giá trị trước và sau. Lọc theo nhân sự, cơ sở, nhóm thao tác, khoảng ngày, tìm theo mã đơn. Gồm đăng nhập (cả đăng nhập sai), vào/ra ca, đặt tại quầy, check-in, thu tiền, hủy, hoàn tiền, đổi sân, bán hàng, sửa chấm công, đổi giá, đổi quyền, sửa nhân sự.
+
+Tab **Cảnh báo bất thường** tự dò các dấu hiệu lách luật:
+
+| Mức | Dấu hiệu |
+| --- | --- |
+| Cao | Đặt tại quầy cho số điện thoại của chính nhân sự (cho người nhà vào sân) |
+| Cao | Đơn tại quầy đã thu tiền mặt rồi bị hủy hoặc hoàn tiền |
+| Trung bình | Một khách vãng lai được cùng một nhân sự đặt nhiều lần |
+| Trung bình | Quên ra ca, hệ thống tự kết thúc |
+| Trung bình | Chấm công bị sửa tay |
+| Thấp | Vào ca muộn |
+| Thấp | Đăng nhập sai nhiều lần |
 
 ## Bảo mật
 
@@ -194,6 +237,9 @@ DB_NAME=pickleball_booking PAYOS_CHECKSUM_KEY=<giống server> node scripts/fina
 DB_NAME=pickleball_booking IOT_DEVICE_KEY=<khóa> node scripts/lighting-test.js http://localhost:3000/api
 DB_NAME=pickleball_booking node scripts/shift-test.js http://localhost:3000/api
 DB_NAME=pickleball_booking node scripts/forecast-test.js http://localhost:3000/api
+DB_NAME=pickleball_booking node scripts/operations-test.js http://localhost:3000/api
 ```
+
+Collection `pickleball-booking-pos` đặt sân tại quầy và check-in nên cần lễ tân, quản lý Quận 7 đang trong ca. Chạy `node scripts/setup-duty.js http://localhost:3000/api` trước khi chạy collection này.
 
 Các collection và script tạo thêm dữ liệu thử mỗi lần chạy (`payment-test.js` còn sửa trực tiếp hạn giữ chỗ), nên chạy trên CSDL vừa khởi tạo lại. `payment-test.js` và `finance-test.js` tự ký webhook PayOS nên server cần chạy với cùng `PAYOS_CHECKSUM_KEY` (ví dụ `PAYOS_CHECKSUM_KEY=khoa-thu npm run dev`); khi không đặt, server tự sinh khóa ngẫu nhiên và từ chối mọi webhook từ bên ngoài.

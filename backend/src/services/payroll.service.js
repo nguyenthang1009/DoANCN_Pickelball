@@ -286,6 +286,19 @@ async function syncAttendance(periodId, actor) {
   return { period: await getPeriod(periodId, actor), warnings };
 }
 
+// Xóa bảng lương còn nháp, ví dụ tạo nhầm tháng. Đã duyệt thì đã ghi sổ, không xóa được.
+async function deletePeriod(id, actor) {
+  await withTransaction(async (conn) => {
+    const period = await getPeriodRow(id, conn, true);
+    assertVenue(actor, period.venue_id);
+    if (period.status !== 'DRAFT') throw new HttpError(409, 'PAYROLL_LOCKED', 'Bảng lương đã duyệt, không xóa được');
+    await conn.query('DELETE FROM payslips WHERE period_id = ?', [id]);
+    await conn.query('DELETE FROM payroll_periods WHERE id = ?', [id]);
+    await audit.log(conn, { actorId: actor.id, venueId: period.venue_id, actionType: 'DELETE_PAYROLL', entityType: 'PAYROLL', entityId: id, oldValues: { month: period.period_month } });
+  });
+  return { deleted: true };
+}
+
 // Duyệt: khóa số liệu và ghi sổ. Người lập không được tự duyệt.
 async function approve(id, actor) {
   await withTransaction(async (conn) => {
@@ -331,4 +344,4 @@ async function myPayslips(user) {
   return rows.map(toSlip);
 }
 
-module.exports = { listContracts, saveContract, listPeriods, getPeriod, createPeriod, updateSlip, syncAttendance, approve, markPaid, myPayslips };
+module.exports = { listContracts, saveContract, listPeriods, getPeriod, createPeriod, updateSlip, syncAttendance, deletePeriod, approve, markPaid, myPayslips };
